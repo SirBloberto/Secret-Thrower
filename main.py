@@ -107,6 +107,10 @@ async def Create(message):
     current_message = await message.channel.send(embed=embed)
 
 async def Send(message):
+    if current_message == None:
+        await message.channel.send("Not currently in a game", delete_after=60.0)
+        return
+
     keys = list(teams.keys())
     throwers.append(random.choice(list(teams[keys[0]])))
     throwers.append(random.choice(list(teams[keys[1]])))
@@ -250,20 +254,24 @@ async def on_message_delete(message):
 
 @client.event
 async def on_reaction_add(reaction, user):
-    keys = list(teams.keys())
-    user = user.name
-    if user not in teams[keys[0]] and user not in teams[keys[1]]:
+    if reaction.message != current_message:
         return
 
-    option_values_team1 = list(OPTIONS[0].values())
-    for index, key in enumerate(teams[keys[0]]):
-        if option_values_team1[index] == reaction.emoji:
-            teams[keys[0]][key] += 1
+    keys = list(teams.keys())
+    if user.name not in teams[keys[0]] and user.name not in teams[keys[1]]:
+        return
 
-    option_values_team2 = list(OPTIONS[1].values())
-    for index, key in enumerate(teams[keys[1]]):
-        if option_values_team2[index] == reaction.emoji:
-            teams[keys[1]][key] += 1
+    reactions = reaction.message.reactions
+    for i in range(0, len(teams.keys())):
+        option_values = list(OPTIONS[i].values())
+        if reaction.emoji not in option_values:
+            continue
+        for j, key in enumerate(teams[keys[i]]):
+            current_reaction = [emoji for emoji in reactions if emoji.emoji == option_values[j]][0]
+            if option_values[j] == reaction.emoji:
+                teams[keys[i]][key] += 1
+            elif user.name in [user.name async for user in current_reaction.users()]:
+                await reaction.message.remove_reaction(current_reaction, user)
 
     team1, team2 = players('voting')
     embed = current_message.embeds[0]
@@ -273,6 +281,9 @@ async def on_reaction_add(reaction, user):
 
 @client.event
 async def on_reaction_remove(reaction, user):
+    if reaction.message != current_message:
+        return
+
     keys = list(teams.keys())
     user = user.name
     if user not in teams[keys[0]] and user not in teams[keys[1]]:
