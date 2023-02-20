@@ -1,31 +1,11 @@
 import discord
-from discord.ext import tasks
+from discord.ext import tasks, commands
 import random
 import time
 from dotenv import dotenv_values
 
 CONFIG = dotenv_values(".env")
-OPTIONS = [{
-    'regional_indicator_a':'🇦',
-    'regional_indicator_b':'🇧',
-    'regional_indicator_c':'🇨',
-    'regional_indicator_d':'🇩',
-    'regional_indicator_e':'🇪',
-    'regional_indicator_f':'🇫',
-    'regional_indicator_g':'🇬',
-    'regional_indicator_h':'🇭',
-    'regional_indicator_i':'🇮',
-},{
-    'one':'1️⃣',
-    'two':'2️⃣',
-    'three':'3️⃣',
-    'four':'4️⃣',
-    'five':'5️⃣',
-    'six':'6️⃣',
-    'seven':'7️⃣',
-    'eight':'8️⃣',
-    'nine':'9️⃣'
-}]
+OPTIONS = [{'regional_indicator_a':'🇦','regional_indicator_b':'🇧','regional_indicator_c':'🇨','regional_indicator_d':'🇩','regional_indicator_e':'🇪','regional_indicator_f':'🇫','regional_indicator_g':'🇬','regional_indicator_h':'🇭','regional_indicator_i':'🇮',},{'one':'1️⃣','two':'2️⃣','three':'3️⃣','four':'4️⃣','five':'5️⃣','six':'6️⃣','seven':'7️⃣','eight':'8️⃣','nine':'9️⃣'}]
 VS = '🆚'
 WINNER = '👑'
 THROWER = '🕵️'
@@ -56,7 +36,7 @@ def players(state):
             if state == 'complete' and key in throwers:
                 string += THROWER
             string += key
-            if state == 'voting' or state == 'complete':
+            if state == 'complete':
                 string += " : " + str(teams[keys[i]][key])
             string += "\n"
         player_list.append(string)
@@ -267,17 +247,14 @@ async def on_reaction_add(reaction, user):
         if reaction.emoji not in option_values:
             continue
         for j, key in enumerate(teams[keys[i]]):
-            current_reaction = [emoji for emoji in reactions if emoji.emoji == option_values[j]][0]
+            current_reaction = [emoji for emoji in reactions if emoji.emoji == option_values[j]]
+            if current_reaction == None:
+                continue
+            current_reaction == current_reaction[0]
             if option_values[j] == reaction.emoji:
                 teams[keys[i]][key] += 1
             elif user.name in [user.name async for user in current_reaction.users()]:
                 await reaction.message.remove_reaction(current_reaction, user)
-
-    team1, team2 = players('voting')
-    embed = current_message.embeds[0]
-    embed.set_field_at(0, name=embed.fields[0].name, value=team1)
-    embed.set_field_at(1, name=embed.fields[1].name, value=team2)
-    await current_message.edit(embed=embed)
 
 @client.event
 async def on_reaction_remove(reaction, user):
@@ -298,12 +275,6 @@ async def on_reaction_remove(reaction, user):
     for index, key in enumerate(teams[keys[1]]):
         if option_values_team2[index] == reaction.emoji:
             teams[keys[1]][key] -= 1
-
-    team1, team2 = players('voting')
-    embed = current_message.embeds[0]
-    embed.set_field_at(0, name=embed.fields[0].name, value=team1)
-    embed.set_field_at(1, name=embed.fields[1].name, value=team2)
-    await current_message.edit(embed=embed)
 
 @tasks.loop(seconds=1)
 async def countdown(channel, id):
