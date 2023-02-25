@@ -13,6 +13,7 @@ def list_players(game: Game):
                 for member in game.throwers[i]:
                     if player.member.id == member.id:
                         string += THROWER
+                        break
             string += player.member.name
             if game.state == State.VOTING or game.state == State.COMPLETE:
                 string += " : " + str(player.count)
