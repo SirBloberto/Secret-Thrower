@@ -10,8 +10,8 @@ def list_players(game: Game):
             if game.state == State.VOTING:
                 string += EMOJIS[i][j]
             if game.state == State.COMPLETE:
-                for member in game.throwers[i]:
-                    if player.member.id == member.id:
+                for member in game.throwers:
+                    if player.member.id == member.member.id:
                         string += THROWER
                         break
             string += player.member.name
@@ -35,3 +35,10 @@ def has_player(game, user):
         if player.member.id == user.id:
             return True
     return False
+
+def get_reaction(game, id):
+    teams = [game.team1, game.team2]
+    for i, team in enumerate(teams):
+        for j, player in enumerate(team.players):
+            if player.member.id == id:
+                return REACTIONS[i][j]
