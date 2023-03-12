@@ -15,7 +15,7 @@ def list_players(game: Game):
                         string += THROWER
                         break
             string += player.member.name
-            if game.state == State.VOTING or game.state == State.COMPLETE:
+            if game.state == State.COMPLETE:
                 string += " : " + str(player.count)
             string += "\n"
         output.append(string)
@@ -36,9 +36,16 @@ def has_player(game, user):
             return True
     return False
 
-def get_reaction(game, id):
+def player_to_reaction(game, id):
     teams = [game.team1, game.team2]
     for i, team in enumerate(teams):
         for j, player in enumerate(team.players):
             if player.member.id == id:
                 return REACTIONS[i][j]
+            
+def reaction_to_player(game, reaction):
+    teams = [game.team1, game.team2]
+    for i, team in enumerate(teams):
+        for j, player in enumerate(team.players):
+            if REACTIONS[i][j] == reaction:
+                return player

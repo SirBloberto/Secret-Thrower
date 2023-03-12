@@ -9,15 +9,11 @@ class State(Enum):
     COMPLETE = 4
 
 @dataclass
-class Config:
-    timer: int
-    blacklist: list[int]
-
-@dataclass
 class Player:
     member: discord.Member
     count: int
-    votes: list[discord.Member]
+    votes: list[int]
+    reactions: list[list[str]]
 
 @dataclass
 class Team:
@@ -28,7 +24,7 @@ class Game:
     guild: discord.Guild
     team1: Team
     team2: Team
-    throwers: list[list[discord.Member]]
+    throwers: list[discord.Member]
     message: discord.Message
     state: State
     info: str
