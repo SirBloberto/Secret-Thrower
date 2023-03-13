@@ -1,6 +1,9 @@
 from data import *
 from constants import *
 
+def include(path):
+    return exec(open(path).read())
+
 def list_players(game: Game):
     teams = [game.team1, game.team2]
     output = []
