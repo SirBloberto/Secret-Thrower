@@ -32,3 +32,6 @@ Description: Remove a player from a secret thrower game
 Syntax: `/timer ?length:Integer`
 
 Description: Set the current secret-thrower voting timer OR show current timer
+
+## Docker
+docker run --name secret-thrower-bot -d secret-thrower:1
