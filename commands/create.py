@@ -12,8 +12,11 @@ async def create(interaction: discord.Interaction, team1: discord.VoiceChannel, 
     global games
     global json
     guild = interaction.guild
-    if get_game(games, guild) != None:
-        return await interaction.response.send_message("Already in a game", ephemeral=True, delete_after=60.0)
+    game = get_game(games, guild)
+    if game != None:
+        await game.message.delete()
+        games.remove(game)
+        await interaction.channel.send("Deleting old game. Starting new Game", delete_after=60.0)
     if team1 == team2:
         return await interaction.response.send_message("Voice channels must be different", ephemeral=True, delete_after=60.0)
     with open('config.json', 'r') as config_in:
