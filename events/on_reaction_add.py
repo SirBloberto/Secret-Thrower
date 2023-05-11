@@ -28,7 +28,7 @@ async def on_reaction_add(reaction: discord.Reaction, user: discord.user):
             continue
         member.reactions[i].append(reaction.emoji)
         for j, player in enumerate(team.players):
-            if REACTIONS[i][j][0] == reaction.emoji:
+            if REACTIONS[i][j] == reaction.emoji:
                 player.count += 1
                 member.votes[i] = player.member.id
                 for emoji in member.reactions[i][:]:

@@ -26,7 +26,7 @@ async def on_reaction_remove(reaction: discord.Reaction, user: discord.User):
             continue
         member.reactions[i].remove(reaction.emoji)
         for j, player in enumerate(team.players):
-            if REACTIONS[i][j][0] == reaction.emoji:
+            if REACTIONS[i][j] == reaction.emoji:
                 player.count -= 1
                 if len(member.reactions[i]) == 0:
                     member.votes[i] = None
