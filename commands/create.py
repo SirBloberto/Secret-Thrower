@@ -17,8 +17,9 @@ async def create(interaction: discord.Interaction, team1: discord.VoiceChannel, 
         await game.message.delete()
         games.remove(game)
         await interaction.channel.send("Deleting old game. Starting new Game", delete_after=60.0)
+        #Add Modal to confirm?
     if team1 == team2:
-        return await interaction.response.send_message("Voice channels must be different", ephemeral=True, delete_after=60.0)
+        return await interaction.response.send_message("Voice channels must be different. Please select two different voice channels", ephemeral=True, delete_after=60.0)
     with open('config.json', 'r') as config_in:
         config = json.load(config_in)
     if str(guild.id) not in config:

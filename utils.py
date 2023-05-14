@@ -52,3 +52,11 @@ def reaction_to_player(game, reaction):
         for j, player in enumerate(team.players):
             if REACTIONS[i][j] == reaction:
                 return player
+
+def game_state(actual, required):
+    states={
+        State.STARTING: "/create",
+        State.PLAYING: "/send",
+        State.VOTING: "/end"
+    }
+    return "Game is in state " + State.STARTING.name + " which occurs after " + states[actual] + ". Command should be executed in state " + required.name + " which occurs after " + states[required]

@@ -17,11 +17,12 @@ async def end(interaction: discord.Interaction, winner: discord.VoiceChannel):
     guild = interaction.guild
     game = get_game(games, guild)
     if game == None:
-        return await interaction.response.send_message("Not in a game!", ephemeral=True, delete_after=60.0)
+        return await interaction.response.send_message("Not in a game! Use /create to start a Secret-Thrower game", ephemeral=True, delete_after=60.0)
     if game.state != State.PLAYING:
-        return await interaction.response.send_message("Game not in correct state", ephemeral=True, delete_after=60.0)
+        #Handle which state we are in and give suggestion
+        return await interaction.response.send_message(game_state(game.state, State.PLAYING), ephemeral=True, delete_after=60.0)
     if winner.id != game.team1.team.id and winner.id != game.team2.team.id:
-        return await interaction.response.send_message("Team not found", ephemeral=True, delete_after=60.0)
+        return await interaction.response.send_message(f"Team not found.  Options are {game.team1.team.name} and {game.team2.team.name}", ephemeral=True, delete_after=60.0)
     with open('config.json', 'r') as config_in:
         config = json.load(config_in)
     game.state = State.VOTING
@@ -31,9 +32,9 @@ async def end(interaction: discord.Interaction, winner: discord.VoiceChannel):
     team1_players, team2_players = list_players(game)
     team1_name, team2_name = game.team1.team.name, game.team2.team.name
     if winner.id == game.team1.team.id:
-        team1_name += " " + WINNER
+        team1_name = WINNER + " " + team1_name
     if winner.id == game.team2.team.id:
-        team2_name += " " + WINNER
+        team2_name = WINNER + " " + team2_name
     embed.set_field_at(0, name=team1_name, value=team1_players)
     embed.set_field_at(1, name=team2_name, value=team2_players)
     game.message = await game.message.edit(embed=embed)
@@ -52,7 +53,6 @@ async def end(interaction: discord.Interaction, winner: discord.VoiceChannel):
             for emoji in player.reactions[i]:
                 if emoji != vote:
                     reaction_to_player(game, emoji).count -= 1
-    game.state = State.COMPLETE
     embed = game.message.embeds[0]
     embed.description = game.info if game.info != None else ""
     team1_players, team2_players = list_players(game)

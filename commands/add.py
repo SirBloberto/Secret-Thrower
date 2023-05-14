@@ -3,19 +3,19 @@ from bot import games, tree
 from data import *
 from utils import *
 
-@tree.command(name="add", description="Add a player to a secret thrower team")
-@discord.app_commands.describe(team="The team to add the player")
-@discord.app_commands.describe(user="The player to be added to the secret thrower game")
+@tree.command(name="add", description="Add/Move a user to a secret thrower team")
+@discord.app_commands.describe(team="The team to add the user")
+@discord.app_commands.describe(user="The user to be added to the secret thrower game")
 async def add(interaction: discord.Interaction, team: discord.VoiceChannel, user: discord.Member):
     global games
     guild = interaction.guild
     game = get_game(games, guild)
     if game == None:
-        return await interaction.response.send_message("Not in a game!", ephemeral=True, delete_after=60.0)
+        return await interaction.response.send_message("Not in a game! Use /create to start a Secret-Thrower game", ephemeral=True, delete_after=60.0)
     if game.state != State.STARTING:
-        return await interaction.response.send_message("Game not in correct state", ephemeral=True, delete_after=60.0)
+        return await interaction.response.send_message(game_state(game.state, State.STARTING), ephemeral=True, delete_after=60.0)
     if team.id != game.team1.team.id and team.id != game.team2.team.id:
-        return await interaction.response.send_message("Team not found", ephemeral=True, delete_after=60.0)
+        return await interaction.response.send_message(f"Team not found.  Options are {game.team1.team.name} and {game.team2.team.name}", ephemeral=True, delete_after=60.0)
     teams = [game.team1, game.team2]
     for game_team in teams:
         for player in game_team.players:
