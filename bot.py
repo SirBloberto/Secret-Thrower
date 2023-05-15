@@ -21,7 +21,7 @@ include("commands/send.py")
 include("commands/end.py")
 include("commands/add.py")
 include("commands/remove.py")
-include("commands/timer.py")
+include("commands/settings.py")
 
 include("events/on_reaction_add.py")
 include("events/on_reaction_remove.py")

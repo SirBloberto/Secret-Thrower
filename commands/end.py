@@ -19,7 +19,6 @@ async def end(interaction: discord.Interaction, winner: discord.VoiceChannel):
     if game == None:
         return await interaction.response.send_message("Not in a game! Use /create to start a Secret-Thrower game", ephemeral=True, delete_after=60.0)
     if game.state != State.PLAYING:
-        #Handle which state we are in and give suggestion
         return await interaction.response.send_message(game_state(game.state, State.PLAYING), ephemeral=True, delete_after=60.0)
     if winner.id != game.team1.team.id and winner.id != game.team2.team.id:
         return await interaction.response.send_message(f"Team not found.  Options are {game.team1.team.name} and {game.team2.team.name}", ephemeral=True, delete_after=60.0)
@@ -27,7 +26,7 @@ async def end(interaction: discord.Interaction, winner: discord.VoiceChannel):
         config = json.load(config_in)
     game.state = State.VOTING
     embed = game.message.embeds[0]
-    end_time = time.time() + config[str(guild.id)]
+    end_time = time.time() + config[str(guild.id)].voting_timer
     embed.description = "Voting ends <t:" + str(int(end_time)) + ":R>" + (" : " + game.info if game.info != None else "")
     team1_players, team2_players = list_players(game)
     team1_name, team2_name = game.team1.team.name, game.team2.team.name

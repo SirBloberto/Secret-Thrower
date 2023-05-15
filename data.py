@@ -23,7 +23,7 @@ class Game:
     guild: discord.Guild
     team1: Team
     team2: Team
-    throwers: list[discord.Member]
+    throwers: list[list[discord.Member]]
     message: discord.Message
     state: State
     info: str

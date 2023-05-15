@@ -13,7 +13,8 @@ def list_players(game: Game):
             if game.state == State.VOTING:
                 string += EMOJIS[i][j]
             if game.state == State.COMPLETE:
-                for member in game.throwers:
+                throwers=game.throwers[0].extend(game.throwers[1])
+                for member in throwers:
                     if player.member.id == member.member.id:
                         string += THROWER
                         break
@@ -60,3 +61,9 @@ def game_state(actual, required):
         State.VOTING: "/end"
     }
     return "Game is in state " + State.STARTING.name + " which occurs after " + states[actual] + ". Command should be executed in state " + required.name + " which occurs after " + states[required]
+
+def game_config():
+    return {
+        "voting_timer": 60,
+        "thrower_info": False,
+    }
