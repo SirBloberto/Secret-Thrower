@@ -28,10 +28,10 @@ Syntax: `/remove player:Member`
 
 Description: Remove a player from a secret thrower game
 
-### /timer
-Syntax: `/timer ?length:Integer`
+### /settings
+Syntax: `/settings ?voting_timer:Integer ?thrower_info:Boolean`
 
-Description: Set the current secret-thrower voting timer OR show current timer
+Description: Set secret-thrower setting(s) and display current settings
 
 ## Docker
 docker run --name secret-thrower-bot -d secret-thrower:1

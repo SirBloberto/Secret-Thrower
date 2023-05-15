@@ -6,6 +6,7 @@ class State(Enum):
     STARTING = 1
     PLAYING = 2
     VOTING = 3
+    COMPLETE = 4
 
 @dataclass
 class Player:

@@ -20,10 +20,8 @@ async def send(interaction: discord.Interaction, team1_count: int = 1, team2_cou
     with open('config.json', 'r') as config_in:
         config = json.load(config_in)
     thrower_info = config[str(guild.id)]['thrower_info']
-    team1_throwers=random.sample(game.team1.players, len(game.team1.players) if len(game.team1.players) < team1_count else team1_count)
-    team2_throwers=random.sample(game.team2.players, len(game.team2.players) if len(game.team2.players) < team2_count else team2_count)
-    game.throwers[0]=team1_throwers
-    game.throwers[1]=team2_throwers
+    game.throwers[0]=random.sample(game.team1.players, len(game.team1.players) if len(game.team1.players) < team1_count else team1_count)
+    game.throwers[1]=random.sample(game.team2.players, len(game.team2.players) if len(game.team2.players) < team2_count else team2_count)
     for index in range(game.teams):
         for player in game.throwers[index]:
             message="You are the secret thrower! Your goal is to lose the game without being discovered by others. "
@@ -34,7 +32,7 @@ async def send(interaction: discord.Interaction, team1_count: int = 1, team2_cou
                 elif len(team_throwers) == 1:
                     message+="Your partner is: " + team_throwers[0].member.name
                 elif len(team_throwers) >= 2:
-                    message+="Your partners are: " + "".join(str(thrower.member.name) for thrower in team_throwers)
+                    message+="Your partners are: " + "".join(str(thrower.member.name) + ", " for thrower in team_throwers)
             await player.member.send(message)
     game.state = State.PLAYING
     await interaction.response.send_message(f"Secret Thrower count -> Team1: {team1_count}, Team2: {team2_count}", ephemeral=not thrower_info, delete_after=60.0)

@@ -52,6 +52,7 @@ async def end(interaction: discord.Interaction, winner: discord.VoiceChannel):
             for emoji in player.reactions[i]:
                 if emoji != vote:
                     reaction_to_player(game, emoji).count -= 1
+    game.state = State.COMPLETE
     embed = game.message.embeds[0]
     embed.description = game.info if game.info != None else ""
     team1_players, team2_players = list_players(game)
