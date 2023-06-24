@@ -1,5 +1,6 @@
 from data import *
 from constants import *
+import sqlite3
 
 def include(path):
     return exec(open(path).read())
@@ -13,7 +14,7 @@ def list_players(game: Game):
             if game.state == State.VOTING:
                 string += EMOJIS[i][j]
             if game.state == State.COMPLETE:
-                throwers=game.throwers[0].extend(game.throwers[1])
+                throwers=game.throwers[0] + game.throwers[1]
                 for member in throwers:
                     if player.member.id == member.member.id:
                         string += THROWER
@@ -57,7 +58,7 @@ def reaction_to_player(game, reaction):
 def game_state(actual, required):
     states={
         State.STARTING: "/create",
-        State.PLAYING: "/send",
+        State.PLAYING: "/start",
         State.VOTING: "/end"
     }
     return "Game is in state " + State.STARTING.name + " which occurs after " + states[actual] + ". Command should be executed in state " + required.name + " which occurs after " + states[required]
@@ -67,3 +68,11 @@ def game_config():
         "voting_timer": 60,
         "thrower_info": False,
     }
+
+connection = sqlite3.connect("secret_thrower")
+cursor = connection.cursor()
+
+def read_sql(file):
+    with open(file, 'r') as sql_file:
+        sql_script = sql_file.read()
+    return cursor.executescript(sql_script)

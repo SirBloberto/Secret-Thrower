@@ -9,3 +9,13 @@ REACTIONS = [
 VS = '🆚'
 WINNER = '👑'
 THROWER = '🕵️'
+STATISTIC_NAMES = [
+    "Games Played",
+    "Wins",
+    "Thrower Games",
+    "Games Thrown",
+    "Votes Received",
+    "Votes Received as Thrower",
+    "Votes Sent",
+    "Votes Sent on Thrower"
+]

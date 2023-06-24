@@ -26,7 +26,7 @@ async def end(interaction: discord.Interaction, winner: discord.VoiceChannel):
         config = json.load(config_in)
     game.state = State.VOTING
     embed = game.message.embeds[0]
-    end_time = time.time() + config[str(guild.id)].voting_timer
+    end_time = time.time() + config[str(guild.id)]["voting_timer"]
     embed.description = "Voting ends <t:" + str(int(end_time)) + ":R>" + (" : " + game.info if game.info != None else "")
     team1_players, team2_players = list_players(game)
     team1_name, team2_name = game.team1.team.name, game.team2.team.name
@@ -63,3 +63,10 @@ async def end(interaction: discord.Interaction, winner: discord.VoiceChannel):
         if games[index].guild.id == guild.id:
             del games[index]
             break
+    cursor.execute(f"UPDATE team SET winner = 1 WHERE game_id = {game.message.id} and channel_id = {winner.id}")
+    for player in (game.team1.players + game.team2.players):
+        for vote in player.votes:
+            if not vote:
+                continue
+            cursor.execute(f"INSERT INTO vote (game_id, user_id, vote) VALUES ({game.message.id}, {player.member.id}, {vote})")
+    connection.commit()

@@ -8,10 +8,10 @@ Syntax: `/create team1:VoiceChannel team2:VoiceChannel ?info:String`
 
 Description: Create a secret thrower game
 
-### /send
-Syntax: `/send ?team1_count:Integer ?team2_count:Integer`
+### /start
+Syntax: `/start ?team1_count:Integer ?team2_count:Integer`
 
-Description: Assign the secret throwers for a game
+Description: Assign the secret throwers and start the game
 
 ### /end
 Syntax: `/end winner:VoiceChannel`
@@ -32,6 +32,11 @@ Description: Remove a player from a secret thrower game
 Syntax: `/settings ?voting_timer:Integer ?thrower_info:Boolean`
 
 Description: Set secret-thrower setting(s) and display current settings
+
+### /statistics
+Syntax: `/statistics`
+
+Description: Get statistics on Secret-Thrower player
 
 ## Docker
 docker run --name secret-thrower-bot -d secret-thrower:1

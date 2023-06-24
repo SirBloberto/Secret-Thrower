@@ -17,11 +17,12 @@ tree = discord.app_commands.CommandTree(client)
 games = []
 
 include("commands/create.py")
-include("commands/send.py")
+include("commands/start.py")
 include("commands/end.py")
 include("commands/add.py")
 include("commands/remove.py")
 include("commands/settings.py")
+include("commands/statistics.py")
 
 include("events/on_reaction_add.py")
 include("events/on_reaction_remove.py")
@@ -32,6 +33,13 @@ async def on_ready():
     if not os.path.exists("config.json"):
         with open("config.json", "w") as config:
             json.dump({}, config)
+        read_sql("sql/guild.sql")
+        read_sql("sql/channel.sql")
+        read_sql("sql/user.sql")
+        read_sql("sql/game.sql")
+        read_sql("sql/team.sql")
+        read_sql("sql/player.sql")
+        read_sql("sql/vote.sql")
     print(f"{client.user} Ready!")
 
 client.run(ENV["TOKEN"])

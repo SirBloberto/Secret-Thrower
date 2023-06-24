@@ -8,7 +8,7 @@ from utils import *
 @discord.app_commands.describe(team1="A voice channel containing members for a team")
 @discord.app_commands.describe(team2="A voice channel containing members for a team")
 @discord.app_commands.describe(info="Any additional info to be included")
-async def create(interaction: discord.Interaction, team1: discord.VoiceChannel, team2: discord.VoiceChannel, info: str=None):
+async def create(interaction: discord.Interaction, team1: discord.VoiceChannel, team2: discord.VoiceChannel, info: str=''):
     global games
     global json
     guild = interaction.guild
