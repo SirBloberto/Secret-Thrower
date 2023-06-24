@@ -4,3 +4,5 @@ services:
     restart: always
     build:
       context: .
+    image: secret-thrower
+    container_name: secret-thrower-bot
