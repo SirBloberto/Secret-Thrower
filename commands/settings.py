@@ -17,7 +17,7 @@ async def settings(interaction: discord.Interaction, voting_timer: typing.Option
     if voting_timer:
         config[guild]['voting_timer'] = voting_timer
         await interaction.channel.send(f"Changed the Secret-Thrower voting_timer setting to {voting_timer} seconds", delete_after=60.0)
-    if thrower_info:
+    if thrower_info != None:
         config[guild]['thrower_info'] = thrower_info
         await interaction.channel.send(f"Changed the Secret-Thrower thrower_info setting to {thrower_info}", delete_after=60.0)
     with open('config.json', 'w') as config_out:
