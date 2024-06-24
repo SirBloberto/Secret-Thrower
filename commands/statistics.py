@@ -12,7 +12,7 @@ async def statistics(interaction: discord.Interaction):
     thrower_games=cursor.execute(f"SELECT COUNT(*) from player WHERE user_id={user} and thrower=1").fetchone()[0]
     games_thrown=cursor.execute(f"SELECT COUNT(*) FROM team WHERE channel_id = (SELECT channel_id FROM player WHERE game_id=team.game_id and user_id={user} and thrower=1) and winner=0").fetchone()[0]
     votes_received=cursor.execute(f"SELECT COUNT(*) from vote WHERE vote={user}").fetchone()[0]
-    votes_received_as_thrower=cursor.execute(f"SELECT count(*) FROM vote WHERE vote={user} and game_id = (SELECT game_id FROM player WHERE user_id={user} and thrower=1)").fetchone()[0]
+    votes_received_as_thrower=cursor.execute(f"SELECT count(*) FROM vote WHERE vote={user} and game_id IN (SELECT game_id FROM player WHERE user_id={user} and thrower=1)").fetchone()[0]
     votes_sent=cursor.execute(f"SELECT COUNT(*) from vote WHERE user_id={user}").fetchone()[0]
     votes_sent_on_thrower=cursor.execute(f"SELECT count(*) FROM vote WHERE user_id={user} and vote IN (SELECT user_id FROM player WHERE game_id=vote.game_id and thrower=1)").fetchone()[0]
     values=[games_played, wins, thrower_games, games_thrown, votes_received, votes_received_as_thrower, votes_sent, votes_sent_on_thrower]
