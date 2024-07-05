@@ -1,4 +1,4 @@
-CREATE TABLE game(
+CREATE TABLE IF NOT EXISTS game(
     game_id INTEGER,
     guild_id INTEGER,
     game_time TEXT,

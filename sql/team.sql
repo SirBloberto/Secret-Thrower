@@ -1,4 +1,4 @@
-CREATE TABLE team(
+CREATE TABLE IF NOT EXISTS team(
     game_id INTEGER,
     channel_id INTEGER,
     winner INTEGER,

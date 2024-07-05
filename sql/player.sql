@@ -1,4 +1,4 @@
-CREATE TABLE player(
+CREATE TABLE IF NOT EXISTS player(
     game_id INTEGER,
     channel_id INTEGER,
     user_id INTEGER,

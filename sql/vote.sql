@@ -1,4 +1,4 @@
-CREATE TABLE vote(
+CREATE TABLE IF NOT EXISTS vote(
     game_id INTEGER,
     user_id INTEGER,
     vote INTEGER,
