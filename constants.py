@@ -19,3 +19,4 @@ STATISTIC_NAMES = [
     "Votes Sent",
     "Votes Sent on Thrower"
 ]
+BASE_RECENT=5

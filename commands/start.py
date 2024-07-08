@@ -1,6 +1,6 @@
 import discord
-import random
 import json
+from numpy import random
 from datetime import datetime
 from bot import games, tree
 from data import *
@@ -22,10 +22,16 @@ async def start(interaction: discord.Interaction, team1_count: int = 1, team2_co
     with open('config.json', 'r') as config_in:
         config = json.load(config_in)
     thrower_info = config[str(guild.id)]['thrower_info']
+    recent = dict((player, recent) for player, recent in cursor.execute(f"SELECT * FROM v_recent WHERE user_id IN ({','.join([str(player) for player in (game.team1.players + game.team2.players)])})").fetchall())
+    probability=[]
+    for index in range(2):
+        probability[index] = {}
+        for player in game.throwers[index]:
+            probability[index][player] = recent[player] if player in recent else 0
     team1_count = len(game.team1.players) if len(game.team1.players) < team1_count else team1_count
     team2_count = len(game.team2.players) if len(game.team2.players) < team2_count else team2_count
-    game.throwers[0]=random.sample(game.team1.players, team1_count)
-    game.throwers[1]=random.sample(game.team2.players, team2_count)
+    game.throwers[0]=random.choice(game.team1.players, size=team1_count, replace=False, p=recent_probabilities(probability[0]))
+    game.throwers[1]=random.choice(game.team2.players, size=team2_count, replace=False, p=recent_probabilities(probability[1]))
     for index in range(2):
         for player in game.throwers[index]:
             message="You are the secret thrower! Your goal is to lose the game without being discovered by others. "

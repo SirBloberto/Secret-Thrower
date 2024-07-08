@@ -40,6 +40,7 @@ async def on_ready():
         read_sql("sql/team.sql")
         read_sql("sql/player.sql")
         read_sql("sql/vote.sql")
+        read_sql("sql/v_recent.sql")
     print(f"{client.user} Ready!")
 
 client.run(ENV["TOKEN"])
