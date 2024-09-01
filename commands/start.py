@@ -1,6 +1,6 @@
 import discord
 import json
-from numpy import random
+import random
 from datetime import datetime
 from bot import games, tree
 from data import *
@@ -30,8 +30,14 @@ async def start(interaction: discord.Interaction, team1_count: int = 1, team2_co
             probability[index][player] = recent[player] if player in recent else 0
     team1_count = len(game.team1.players) if len(game.team1.players) < team1_count else team1_count
     team2_count = len(game.team2.players) if len(game.team2.players) < team2_count else team2_count
-    game.throwers[0]=random.choice(game.team1.players, size=team1_count, replace=False, p=recent_probabilities(probability[0]))
-    game.throwers[1]=random.choice(game.team2.players, size=team2_count, replace=False, p=recent_probabilities(probability[1]))
+    for _ in range(team1_count):
+        thrower = random.choices(probability[0].keys(), weights=probability[0].values())
+        game.throwers[0].append(thrower)
+        del probability[0][thrower]
+    for _ in range(team2_count):
+        thrower = random.choices(probability[1].keys(), weights=probability[1].values())
+        game.throwers[1].append(thrower)
+        del probability[1][thrower]
     for index in range(2):
         for player in game.throwers[index]:
             message="You are the secret thrower! Your goal is to lose the game without being discovered by others. "
