@@ -22,21 +22,23 @@ async def start(interaction: discord.Interaction, team1_count: int = 1, team2_co
     with open('config.json', 'r') as config_in:
         config = json.load(config_in)
     thrower_info = config[str(guild.id)]['thrower_info']
-    recent = dict((player, recent) for player, recent in cursor.execute(f"SELECT * FROM v_recent WHERE user_id IN ({','.join([str(player) for player in (game.team1.players + game.team2.players)])})").fetchall())
+    player_recent = cursor.execute(f"SELECT * FROM v_recent WHERE user_id IN ({','.join([str(player.member.id) for player in (game.team1.players + game.team2.players)])})").fetchall()
+    recent = dict((player, recent) for player, recent in player_recent)
     probability=[]
+    players = [game.team1.players, game.team2.players]
     for index in range(2):
-        probability[index] = {}
-        for player in game.throwers[index]:
-            probability[index][player] = recent[player] if player in recent else 0
+        probability.append({})
+        for player in players[index]:
+            probability[index][player.member.id] = recent[player.member.id] if player.member.id in recent else 1
     team1_count = len(game.team1.players) if len(game.team1.players) < team1_count else team1_count
     team2_count = len(game.team2.players) if len(game.team2.players) < team2_count else team2_count
     for _ in range(team1_count):
-        thrower = random.choices(probability[0].keys(), weights=probability[0].values())
-        game.throwers[0].append(thrower)
+        thrower = random.choices(list(probability[0].keys()), weights=list(probability[0].values()))[0]
+        game.throwers[0].append(id_to_player(game, thrower))
         del probability[0][thrower]
     for _ in range(team2_count):
-        thrower = random.choices(probability[1].keys(), weights=probability[1].values())
-        game.throwers[1].append(thrower)
+        thrower = random.choices(list(probability[1].keys()), weights=list(probability[1].values()))[0]
+        game.throwers[1].append(id_to_player(game, thrower))
         del probability[1][thrower]
     for index in range(2):
         for player in game.throwers[index]:

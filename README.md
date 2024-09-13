@@ -39,4 +39,4 @@ Syntax: `/statistics`
 Description: Get statistics on Secret-Thrower player
 
 ## Docker
-docker run --name secret-thrower-bot -d secret-thrower:1
+docker-compose up --build -d

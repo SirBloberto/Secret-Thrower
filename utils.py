@@ -55,6 +55,12 @@ def reaction_to_player(game, reaction):
             if REACTIONS[i][j] == reaction:
                 return player
 
+def id_to_player(game, id):
+    for player in game.team1.players:
+        if player.member.id == id: return player
+    for player in game.team2.players:
+        if player.member.id == id: return player
+
 def game_state(actual, required):
     states={
         State.STARTING: "/create",
