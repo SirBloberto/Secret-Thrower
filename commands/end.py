@@ -14,16 +14,20 @@ async def end(interaction: discord.Interaction, winner: discord.VoiceChannel):
     global asyncio
     global json
     global time
+
     guild = interaction.guild
     game = get_game(games, guild)
+
     if game == None:
         return await interaction.response.send_message("Not in a game! Use /create to start a Secret-Thrower game", ephemeral=True, delete_after=60.0)
     if game.state != State.PLAYING:
         return await interaction.response.send_message(game_state(game.state, State.PLAYING), ephemeral=True, delete_after=60.0)
     if winner.id != game.team1.team.id and winner.id != game.team2.team.id:
         return await interaction.response.send_message(f"Team not found.  Options are {game.team1.team.name} and {game.team2.team.name}", ephemeral=True, delete_after=60.0)
+    
     with open('config.json', 'r') as config_in:
         config = json.load(config_in)
+
     game.state = State.VOTING
     embed = game.message.embeds[0]
     end_time = time.time() + config[str(guild.id)]["voting_timer"]
@@ -38,11 +42,13 @@ async def end(interaction: discord.Interaction, winner: discord.VoiceChannel):
     embed.set_field_at(1, name=team2_name, value=team2_players)
     game.message = await game.message.edit(embed=embed)
     await interaction.response.send_message(f"Winner is {winner}! Vote for a secret thrower on each team!", delete_after=60.0)
+
     for index in range(0, len(game.team1.players)):
         await game.message.add_reaction(REACTIONS[0][index])
     await game.message.add_reaction(VS)
     for index in range(0, len(game.team2.players)):
         await game.message.add_reaction(REACTIONS[1][index])
+    
     await asyncio.sleep(end_time - time.time())
     await game.message.clear_reactions()
     teams = [game.team1, game.team2]
@@ -52,6 +58,7 @@ async def end(interaction: discord.Interaction, winner: discord.VoiceChannel):
             for emoji in player.reactions[i]:
                 if emoji != vote:
                     reaction_to_player(game, emoji).count -= 1
+
     game.state = State.COMPLETE
     embed = game.message.embeds[0]
     embed.description = game.info if game.info != None else ""
@@ -63,6 +70,7 @@ async def end(interaction: discord.Interaction, winner: discord.VoiceChannel):
         if games[index].guild.id == guild.id:
             del games[index]
             break
+    
     cursor.execute(f"UPDATE team SET winner = 1 WHERE game_id = {game.message.id} and channel_id = {winner.id}")
     for player in (game.team1.players + game.team2.players):
         for vote in player.votes:

@@ -7,6 +7,7 @@ from utils import *
 async def on_reaction_remove(reaction: discord.Reaction, user: discord.User):
     guild = reaction.message.guild
     game = get_game(games, guild)
+
     if game == None:
         return
     if reaction.message != game.message:
@@ -15,12 +16,14 @@ async def on_reaction_remove(reaction: discord.Reaction, user: discord.User):
         pass
     if not has_player(game, user):
         return
+    
     teams = [game.team1, game.team2]
     member = None
     for team in teams:
         for player in team.players:
             if player.member.id == user.id:
                 member = player
+    
     for i, team in enumerate(teams):
         if reaction.emoji not in REACTIONS[i]:
             continue

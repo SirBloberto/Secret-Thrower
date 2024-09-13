@@ -33,6 +33,7 @@ async def on_ready():
     if not os.path.exists("config.json"):
         with open("config.json", "w") as config:
             json.dump({}, config)
+        
         read_sql("sql/guild.sql")
         read_sql("sql/channel.sql")
         read_sql("sql/user.sql")
@@ -41,6 +42,7 @@ async def on_ready():
         read_sql("sql/player.sql")
         read_sql("sql/vote.sql")
         read_sql("sql/v_recent.sql")
+    
     print(f"{client.user} Ready!")
 
 client.run(ENV["TOKEN"])

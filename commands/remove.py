@@ -7,12 +7,15 @@ from utils import *
 @discord.app_commands.describe(user="The user to be removed from the secret thrower game")
 async def add(interaction: discord.Interaction, user: discord.Member):
     global games
+
     guild = interaction.guild
     game = get_game(games, guild)
+
     if game == None:
         return await interaction.response.send_message("Not in a game! Use /create to start a Secret-Thrower game", ephemeral=True, delete_after=60.0)
     if game.state != State.STARTING:
         return await interaction.response.send_message(game_state(game.state, State.STARTING), ephemeral=True, delete_after=60.0)
+    
     teams = [game.team1, game.team2]
     for team in teams:
         for player in team.players:

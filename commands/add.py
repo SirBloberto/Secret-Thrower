@@ -8,14 +8,17 @@ from utils import *
 @discord.app_commands.describe(user="The user to be added to the secret thrower game")
 async def add(interaction: discord.Interaction, team: discord.VoiceChannel, user: discord.Member):
     global games
+
     guild = interaction.guild
     game = get_game(games, guild)
+
     if game == None:
         return await interaction.response.send_message("Not in a game! Use /create to start a Secret-Thrower game", ephemeral=True, delete_after=60.0)
     if game.state != State.STARTING:
         return await interaction.response.send_message(game_state(game.state, State.STARTING), ephemeral=True, delete_after=60.0)
     if team.id != game.team1.team.id and team.id != game.team2.team.id:
         return await interaction.response.send_message(f"Team not found.  Options are {game.team1.team.name} and {game.team2.team.name}", ephemeral=True, delete_after=60.0)
+    
     teams = [game.team1, game.team2]
     for game_team in teams:
         for player in game_team.players:
@@ -25,6 +28,7 @@ async def add(interaction: discord.Interaction, team: discord.VoiceChannel, user
         if game_team.team.id != team.id:
             continue
         game_team.players.append(Player(user, 0, [None, None], [[],[]]))
+    
     embed = game.message.embeds[0]
     embed.description = game.info if game.info != None else ""
     team1_players, team2_players = list_players(game)

@@ -10,6 +10,7 @@ def list_players(game: Game):
     output = []
     for i, team in enumerate(teams):
         string = ""
+        
         for j, player in enumerate(team.players):
             if game.state == State.VOTING:
                 string += EMOJIS[i][j]
@@ -19,6 +20,7 @@ def list_players(game: Game):
                     if player.member.id == member.member.id:
                         string += THROWER
                         break
+            
             string += player.member.name
             if game.state == State.COMPLETE:
                 string += " : " + str(player.count)
