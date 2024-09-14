@@ -38,5 +38,10 @@ Syntax: `/statistics`
 
 Description: Get statistics on Secret-Thrower player
 
+### /help
+Syntax: `/help`
+
+Description: Summarize Secret Thrower game loop and commands
+
 ## Docker
 docker-compose up --build -d
