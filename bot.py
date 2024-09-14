@@ -23,6 +23,7 @@ include("commands/add.py")
 include("commands/remove.py")
 include("commands/settings.py")
 include("commands/statistics.py")
+include("commands/help.py")
 
 include("events/on_reaction_add.py")
 include("events/on_reaction_remove.py")
