@@ -6,44 +6,25 @@ from utils import *
 
 ENV = dotenv_values(".env")
 
-intents = discord.Intents.default()
-intents.message_content = True
-intents.dm_messages = True
-intents.members = True
-intents.reactions = True
-
-client = discord.Client(intents=intents)
-tree = discord.app_commands.CommandTree(client)
-games = []
-
-include("commands/create.py")
-include("commands/start.py")
-include("commands/end.py")
-include("commands/add.py")
-include("commands/remove.py")
-include("commands/settings.py")
-include("commands/statistics.py")
-include("commands/help.py")
-
-include("events/on_reaction_add.py")
-include("events/on_reaction_remove.py")
-
-@client.event
-async def on_ready():
-    await tree.sync()
-    if not os.path.exists("config.json"):
-        with open("config.json", "w") as config:
-            json.dump({}, config)
+class SecretThrowerBot(commands.Bot):
+    def __init__(self):
+        intents = discord.Intents.default()
+        intents.message_content = True
+        intents.dm_messages = True
+        intents.members = True
+        intents.reactions = True
         
-        read_sql("sql/guild.sql")
-        read_sql("sql/channel.sql")
-        read_sql("sql/user.sql")
-        read_sql("sql/game.sql")
-        read_sql("sql/team.sql")
-        read_sql("sql/player.sql")
-        read_sql("sql/vote.sql")
-        read_sql("sql/v_recent.sql")
-    
-    print(f"{client.user} Ready!")
+        super().__init__(command_prefix="/", intents=intents)
 
-client.run(ENV["TOKEN"])
+    async def setup_hook(self):
+        for filename in os.listdir("./cogs"):
+            if filename.endswith(".py") and filename != "__init__.py":
+                await self.load_extension(f"cogs.{filename[:-3]}")
+        
+        await self.tree.sync()
+
+    async def on_ready(self):
+        print(f'{self.user} is online!')
+
+bot = SecretThrowerBot()
+bot.run(ENV["TOKEN"])[cite: 5]

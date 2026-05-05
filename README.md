@@ -3,6 +3,8 @@
 https://discord.com/api/oauth2/authorize?client_id=1061748245581267174&permissions=2147493952&scope=bot%20applications.commands
 ## Usage
 
+REWORK
+
 ### /create
 Syntax: `/create team1:VoiceChannel team2:VoiceChannel ?info:String`
 

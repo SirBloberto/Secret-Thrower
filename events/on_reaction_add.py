@@ -3,6 +3,7 @@ from bot import client, games
 from constants import *
 from utils import *
 
+
 @client.event
 async def on_reaction_add(reaction: discord.Reaction, user: discord.user):
     global games
@@ -18,7 +19,7 @@ async def on_reaction_add(reaction: discord.Reaction, user: discord.user):
         return
     if not has_player(game, user):
         return
-    
+
     teams = [game.team1, game.team2]
     member = None
     for team in teams:
@@ -26,7 +27,7 @@ async def on_reaction_add(reaction: discord.Reaction, user: discord.user):
             if player.member.id == user.id:
                 member = player
                 break
-    
+
     for i, team in enumerate(teams):
         if reaction.emoji not in REACTIONS[i]:
             continue

@@ -6,3 +6,4 @@ services:
       context: .
     image: secret-thrower
     container_name: secret-thrower-bot
+#Needs a serious rework. Use redis

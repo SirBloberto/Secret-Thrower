@@ -6,4 +6,5 @@ COPY . .
 
 RUN pip install -r requirements.txt
  
+#Needs a serious rework
 CMD [ "python", "bot.py" ]
