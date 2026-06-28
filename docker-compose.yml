@@ -1,9 +1,32 @@
-version: "3.8"
 services:
-  secret-thrower:
-    restart: always
-    build:
-      context: .
-    image: secret-thrower
-    container_name: secret-thrower-bot
-#Needs a serious rework. Use redis
+  bot:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  web:
+    build: .
+    command: uvicorn api:app --host 0.0.0.0 --port 8000
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  redis:
+    image: redis:alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5

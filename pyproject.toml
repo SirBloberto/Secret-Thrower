@@ -1,21 +1,30 @@
 [project]
-name = "supabase-migration"
+name = "secret-thrower"
 version = "0.1.0"
-description = "Add your description here"
+description = "A Discord bot for running Secret Thrower social deduction games"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.18.4",
+    "asyncpg>=0.30.0",
     "discord-py>=2.7.1",
-    "psycopg2-binary>=2.9.12",
+    "fastapi>=0.115.0",
     "python-dotenv>=1.2.2",
+    "redis>=7.4.0",
     "sqlalchemy>=2.0.49",
+    "stripe>=11.0.0",
+    "uvicorn>=0.32.0",
 ]
 
 [dependency-groups]
 dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
     "ruff>=0.15.12",
 ]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
 
 [tool.ruff]
 target-version = "py312"

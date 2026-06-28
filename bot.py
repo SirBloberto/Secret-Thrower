@@ -1,30 +1,39 @@
-import discord
-import json
+import logging
 import os
-from dotenv import dotenv_values
-from utils import *
 
-ENV = dotenv_values(".env")
+import discord
+from discord.ext import commands
+from dotenv import load_dotenv
+
+load_dotenv()
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+log = logging.getLogger(__name__)
+
 
 class SecretThrowerBot(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
-        intents.message_content = True
-        intents.dm_messages = True
-        intents.members = True
-        intents.reactions = True
-        
+        intents.members = True  # needed to read voice channel members and guild member cache
+
         super().__init__(command_prefix="/", intents=intents)
 
     async def setup_hook(self):
         for filename in os.listdir("./cogs"):
             if filename.endswith(".py") and filename != "__init__.py":
                 await self.load_extension(f"cogs.{filename[:-3]}")
-        
+                log.info("Loaded cog: %s", filename[:-3])
+
         await self.tree.sync()
+        log.info("Slash commands synced.")
 
     async def on_ready(self):
-        print(f'{self.user} is online!')
+        log.info("%s is online!", self.user)
+
 
 bot = SecretThrowerBot()
-bot.run(ENV["TOKEN"])[cite: 5]
+bot.run(os.getenv("DISCORD_TOKEN"))

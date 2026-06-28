@@ -1,49 +1,80 @@
-# Secret-Thrower
-## Invite Link
-https://discord.com/api/oauth2/authorize?client_id=1061748245581267174&permissions=2147493952&scope=bot%20applications.commands
-## Usage
+# Secret Thrower
 
-REWORK
+A Discord bot for a social deduction game played across two voice channel teams. One or more players on each team are secretly assigned as "throwers" — their goal is to make their team lose without being detected. After the match, players vote on who they think the thrower was.
 
-### /create
-Syntax: `/create team1:VoiceChannel team2:VoiceChannel ?info:String`
+## Game Loop
 
-Description: Create a secret thrower game
+1. **`/game setup`** — Start a game by selecting two voice channels as teams. Players currently in those channels are pulled in automatically.
+2. **`/game add` / `/game remove`** — Adjust the player list before the game begins.
+3. **`/game start`** — Secretly assigns throwers on each team and DMs them their role. Thrower selection is weighted so players who haven't thrown recently are more likely to be chosen.
+4. Play the game.
+5. **`/game result`** — Declare the winning team and open the voting phase. An interactive button panel appears on the game embed — one button per player per team. Players click to accuse who they think the thrower was. Voting closes automatically when the timer runs out.
+6. Results are revealed: throwers are unmasked, vote tallies are shown, and caught/escaped status is displayed. The game record is saved to the database.
 
-### /start
-Syntax: `/start ?team1_count:Integer ?team2_count:Integer`
+## Commands
 
-Description: Assign the secret throwers and start the game
+### Game Management
 
-### /end
-Syntax: `/end winner:VoiceChannel`
+| Command | Arguments | Description |
+|---|---|---|
+| `/game setup` | `team1`, `team2` | Initialize a game from two voice channels |
+| `/game add` | `team`, `user` | Add or move a player to a team |
+| `/game remove` | `user` | Remove a player from the game |
+| `/game start` | `team1_count?`, `team2_count?` | Assign throwers and begin the game |
+| `/game result` | `winner` | Declare the winning team and start voting |
+| `/game cancel` | — | Cancel the current game |
 
-Description: End the secret thrower game and assign a winner
+### Profile
 
-### /add
-Syntax: `/add team:VoiceChannel player:Member`
+| Command | Arguments | Description |
+|---|---|---|
+| `/profile stats` | `user?` | View game statistics and ELO for yourself or another player |
 
-Description: Add a player to a secret thrower team
+### General
 
-### /remove
-Syntax: `/remove player:Member`
+| Command | Arguments | Description |
+|---|---|---|
+| `/settings` | `voting_timer?`, `thrower_info?` | View or update server settings |
+| `/help` | — | Show the game loop and available commands |
 
-Description: Remove a player from a secret thrower game
+## Settings
 
-### /settings
-Syntax: `/settings ?voting_timer:Integer ?thrower_info:Boolean`
+| Setting | Default | Description |
+|---|---|---|
+| `voting_timer` | `60` | Seconds players have to vote after a result is declared |
+| `thrower_info` | `false` | If enabled, publicly shows thrower counts and tells throwers the names of their partners |
 
-Description: Set secret-thrower setting(s) and display current settings
+## Self-Hosting
 
-### /statistics
-Syntax: `/statistics`
+### Environment Variables
 
-Description: Get statistics on Secret-Thrower player
+Create a `.env` file in the project root:
 
-### /help
-Syntax: `/help`
+```env
+TOKEN=your_discord_bot_token
+DATABASE_URL=postgresql://user:password@host:port/dbname
+```
 
-Description: Summarize Secret Thrower game loop and commands
+The Redis connection is managed internally by Docker Compose and does not need to be set manually.
 
-## Docker
+### Running with Docker
+
+```bash
 docker-compose up --build -d
+```
+
+The bot runs database migrations automatically on startup.
+
+### Running Locally (Development)
+
+```bash
+uv sync
+alembic upgrade head
+python bot.py
+```
+
+## Requirements
+
+- Python 3.12+
+- PostgreSQL (or a Supabase project)
+- Redis

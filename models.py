@@ -1,8 +1,10 @@
 from __future__ import annotations
+
 import enum
 from datetime import datetime
 from typing import List, Optional
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Enum
+
+from sqlalchemy import BigInteger, Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -52,41 +54,46 @@ class User(Base):
         String(32), comment="The Discord username of the player at the time of last record"
     )
 
-    games_played: Mapped[int] = mapped_column(
-        Integer, default=0, server_default="0", 
-        comment="Total matches completed"
-    )
+    games_played: Mapped[int] = mapped_column(Integer, default=0, server_default="0", comment="Total matches completed")
     games_won: Mapped[int] = mapped_column(
-        Integer, default=0, server_default="0", 
-        comment="Total matches won regardless of role"
+        Integer, default=0, server_default="0", comment="Total matches won regardless of role"
     )
-    gamas_as_thrower: Mapped[int] = mapped_column(
-        Integer, default=0, server_default="0", 
-        comment="How many times this user was assigned the Secret Thrower role"
+    games_as_thrower: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", comment="How many times this user was assigned the Secret Thrower role"
     )
     games_thrown: Mapped[int] = mapped_column(
-        Integer, default=0, server_default="0", 
-        comment="Games won specifically while being the Thrower (Bluff success)"
+        Integer, default=0, server_default="0", comment="Games where user was the Thrower and their team lost (successful bluff)"
     )
-    votes_received: Mapped[int] = mapped_column(
-        Integer, default=0, server_default="0", 
-        comment="Total votes cast against this user by others"
+    total_votes_received: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", comment="Total votes cast against this user by others"
     )
     votes_received_as_thrower: Mapped[int] = mapped_column(
-        Integer, default=0, server_default="0", 
-        comment="Votes received while user was actually the thrower (Caught count)"
+        Integer,
+        default=0,
+        server_default="0",
+        comment="Votes received while user was actually the thrower (Caught count)",
     )
-    votes_cast: Mapped[int] = mapped_column(
-        Integer, default=0, server_default="0", 
-        comment="Total number of votes this user has sent"
+    total_votes_cast: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", comment="Total number of votes this user has sent"
     )
     votes_cast_on_thrower: Mapped[int] = mapped_column(
-        Integer, default=0, server_default="0", 
-        comment="How many times this user correctly voted for the actual thrower"
+        Integer,
+        default=0,
+        server_default="0",
+        comment="How many times this user correctly voted for the actual thrower",
+    )
+    games_evaded: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        server_default="0",
+        comment="Games where user was the Thrower, team lost, and they were not the most accused player",
     )
 
-    #Store voting preferences here as dictionary
-    #ELO? Thrower/Player
+    innocent_elo: Mapped[float] = mapped_column(Float, default=50.0, server_default="50.0")
+    thrower_elo: Mapped[float] = mapped_column(Float, default=50.0, server_default="50.0")
+    achievements: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0", comment="Bitmask of unlocked achievements")
+    win_streak: Mapped[int] = mapped_column(Integer, default=0, server_default="0", comment="Current consecutive win streak")
+    best_win_streak: Mapped[int] = mapped_column(Integer, default=0, server_default="0", comment="All-time best consecutive win streak")
 
     game_history: Mapped[List["Player"]] = relationship(back_populates="user")
     votes_received: Mapped[List["Vote"]] = relationship(foreign_keys="[Vote.target_id]", back_populates="target")
@@ -109,9 +116,6 @@ class Game(Base):
         server_default=func.now(),
         comment="Timestamp when the game result was committed to the database",
     )
-    voting_timer: Mapped[int] = mapped_column(
-        Integer, default=60, comment="The specific voting duration (in seconds) used for this game session"
-    )
     winning_channel_id: Mapped[Optional[int]] = mapped_column(
         BigInteger, comment="The ID of the voice channel/team that won the game"
     )
@@ -129,7 +133,7 @@ class Player(Base):
         BigInteger, ForeignKey("games.game_id"), primary_key=True, comment="Reference to the game session"
     )
     user_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("users.user_id"), primary_key=True, comment="Reference to the user"
+        BigInteger, ForeignKey("users.user_id"), primary_key=True, index=True, comment="Reference to the user"
     )
     channel_id: Mapped[int] = mapped_column(
         BigInteger, index=True, comment="The ID of the voice channel this player was assigned to"
@@ -140,6 +144,36 @@ class Player(Base):
 
     game: Mapped["Game"] = relationship(back_populates="players")
     user: Mapped["User"] = relationship(back_populates="game_history")
+
+
+class GuildSettings(Base):
+    """Stores per-guild configuration, persisting across Redis flushes."""
+
+    __tablename__ = "guild_settings"
+
+    guild_id: Mapped[int] = mapped_column(
+        BigInteger, primary_key=True, comment="The Discord Snowflake ID of the server"
+    )
+    voting_timer: Mapped[int] = mapped_column(
+        Integer, default=60, server_default="60", comment="Voting phase duration in seconds"
+    )
+    thrower_info: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", comment="Whether throwers are told about teammates who are also throwers"
+    )
+
+
+class GuildEloRole(Base):
+    """Maps ELO tier thresholds to Discord role IDs for automatic role assignment."""
+
+    __tablename__ = "guild_elo_roles"
+
+    __table_args__ = (UniqueConstraint("guild_id", "role_id", name="uq_guild_elo_role"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    guild_id: Mapped[int] = mapped_column(BigInteger, index=True, comment="The Discord Guild ID")
+    elo_type: Mapped[str] = mapped_column(String(16), comment="'innocent' or 'thrower'")
+    min_elo: Mapped[float] = mapped_column(Float, comment="Minimum ELO to receive this role")
+    role_id: Mapped[int] = mapped_column(BigInteger, comment="Discord role ID to assign")
 
 
 class Vote(Base):
