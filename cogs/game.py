@@ -13,13 +13,8 @@ from discord.ext import commands
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from achievements import check_game_achievements, check_new_achievements, unlocked_list
 from constants import (
     BASE_RECENT,
-    ELO_ABSTAIN_PENALTY,
-    ELO_INCORRECT_PENALTY,
-    ELO_K,
-    ELO_K_FLEX,
     MAX_PLAYERS_PER_TEAM,
     MIN_PLAYERS_PER_TEAM,
     MIN_VOTING_TIMER,
@@ -33,12 +28,11 @@ from data import Game, GameSettings, GameState, Player, Team
 from database import (
     AsyncSessionLocal,
     delete_game_state,
-    is_premium,
     redis_client,
     save_game_state,
 )
+from elo import compute_elo_updates
 from models import Game as DBGame
-from models import GuildEloRole
 from models import Player as DBPlayer
 from models import User as DBUser
 from models import Vote as DBVote
@@ -47,7 +41,7 @@ log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Game settings modal + premium customization modal + setup view
+# Setup UI
 # ---------------------------------------------------------------------------
 
 
@@ -102,59 +96,6 @@ class GameSettingsModal(discord.ui.Modal, title="Game Settings"):
         )
 
 
-class CustomizeModal(discord.ui.Modal, title="Premium Customization"):
-    team1_name: discord.ui.TextInput = discord.ui.TextInput(
-        label="Team 1 name (blank = voice channel name)",
-        placeholder="e.g. Red Squad",
-        required=False,
-        max_length=32,
-    )
-    team2_name: discord.ui.TextInput = discord.ui.TextInput(
-        label="Team 2 name (blank = voice channel name)",
-        placeholder="e.g. Blue Squad",
-        required=False,
-        max_length=32,
-    )
-    embed_color: discord.ui.TextInput = discord.ui.TextInput(
-        label="Embed color (hex, e.g. #ff5500)",
-        placeholder="#ff5500",
-        required=False,
-        max_length=7,
-    )
-
-    def __init__(self, game: "Game", cog: "GameCog") -> None:
-        super().__init__()
-        self._game = game
-        self._cog = cog
-        self.team1_name.default = game.settings.team1_name
-        self.team2_name.default = game.settings.team2_name
-        if game.settings.embed_color is not None:
-            self.embed_color.default = f"#{game.settings.embed_color:06x}"
-
-    async def on_submit(self, interaction: discord.Interaction) -> None:
-        color_str = self.embed_color.value.strip()
-        embed_color: int | None = None
-        if color_str:
-            try:
-                embed_color = int(color_str.lstrip("#"), 16)
-                if embed_color > 0xFFFFFF:
-                    raise ValueError
-            except ValueError:
-                return await interaction.response.send_message(
-                    "Invalid color — use a hex code like `#ff5500`.", ephemeral=True
-                )
-
-        self._game.settings.team1_name = self.team1_name.value.strip()
-        self._game.settings.team2_name = self.team2_name.value.strip()
-        self._game.settings.embed_color = embed_color
-
-        await save_game_state(self._game.game_id, self._game.to_json())
-        if self._game.message:
-            await self._game.message.edit(embed=self._cog._build_embed(self._game))
-
-        await interaction.response.send_message("✅ Customization applied!", ephemeral=True)
-
-
 class SetupView(discord.ui.View):
     def __init__(self, game: "Game", cog: "GameCog") -> None:
         super().__init__(timeout=600)
@@ -193,7 +134,6 @@ class GameCog(commands.Cog):
         self.bot = bot
         self.active_games: dict[int, dict[int, Game]] = {}  # guild_id -> {game_id -> Game}
         self._recovered = False
-        self._role_hierarchy_warned: set[int] = set()  # guild_ids already notified this session
 
     game = app_commands.Group(name="game", description="Match lifecycle management")
 
@@ -330,9 +270,7 @@ class GameCog(commands.Cog):
                         await self.reveal_results(game)
                     else:
                         log.info("Resuming voting timer for guild %d (%.0fs remaining)", guild_id, remaining)
-                        game.voting_task = asyncio.create_task(
-                            self._run_voting_timer(game, delay=remaining)
-                        )
+                        game.voting_task = asyncio.create_task(self._run_voting_timer(game, delay=remaining))
 
                 recovered += 1
                 log.info("Recovered game for guild %d (state: %s)", guild_id, game.state.name)
@@ -391,27 +329,17 @@ class GameCog(commands.Cog):
     @staticmethod
     def _team_name(game: Game, team_idx: int) -> str:
         team = game.get_teams()[team_idx]
-        custom = game.settings.team1_name if team_idx == 0 else game.settings.team2_name
-        return custom or (team.channel.name if team else f"Team {team_idx + 1}")
+        return team.channel.name if team else f"Team {team_idx + 1}"
 
     def _build_embed(self, game: Game) -> discord.Embed:
-        if game.settings.embed_color is not None:
-            color = discord.Color(game.settings.embed_color)
-        elif game.state == GameState.SETUP:
-            color = discord.Color.blue()
-        else:
-            color = discord.Color.green()
-
+        color = discord.Color.blue() if game.state == GameState.SETUP else discord.Color.green()
         embed = discord.Embed(title="Secret Thrower", color=color)
 
         teams = game.get_teams()
         if game.state == GameState.VOTING:
             emoji_sets = [TEAM1_EMOJIS, TEAM2_EMOJIS]
             for team_idx, team in enumerate(teams):
-                lines = [
-                    f"{emoji_sets[team_idx][i]} {p.member.display_name}"
-                    for i, p in enumerate(team.players)
-                ]
+                lines = [f"{emoji_sets[team_idx][i]} {p.member.display_name}" for i, p in enumerate(team.players)]
                 embed.add_field(name=self._team_name(game, team_idx), value="\n".join(lines), inline=True)
                 if team_idx == 0:
                     embed.add_field(name="​", value="​", inline=True)
@@ -430,13 +358,6 @@ class GameCog(commands.Cog):
             )
 
         return embed
-
-    @staticmethod
-    def _k_factor(elo: float, delta: float) -> float:
-        """K scales with distance from 50: gaining is easier below 50, harder above."""
-        deviation = (elo - 50.0) / 50.0  # -1 at ELO 0, 0 at ELO 50, +1 at ELO 100
-        factor = 1.0 - deviation * ELO_K_FLEX if delta >= 0 else 1.0 + deviation * ELO_K_FLEX
-        return ELO_K * max(0.4, factor)
 
     @staticmethod
     def _weighted_sample(population: list[int], weights: dict[int, float], k: int) -> list[int]:
@@ -599,27 +520,6 @@ class GameCog(commands.Cog):
         log.info("Game cancelled in guild %d by user %d", guild_id, interaction.user.id)
         await interaction.response.send_message("Game cancelled.", ephemeral=True, delete_after=30.0)
 
-    @game.command(name="customize", description="Set custom team names and embed color (Premium)")
-    async def customize(self, interaction: discord.Interaction) -> None:
-        game = self._get_game(interaction)
-        if game is None:
-            return await interaction.response.send_message(self._no_game_msg(interaction.guild_id), ephemeral=True)
-        if game.state != GameState.SETUP:
-            return await interaction.response.send_message(
-                "Customization can only be changed during setup.", ephemeral=True
-            )
-        if not self._is_host_or_mod(game, interaction):
-            return await interaction.response.send_message(
-                "Only the game host or a server moderator can customize the game.", ephemeral=True
-            )
-        if not await is_premium(interaction.guild_id):
-            return await interaction.response.send_message(
-                "Custom team names and embed colors require **Secret Thrower Premium**. "
-                "Use `/subscribe` to unlock.",
-                ephemeral=True,
-            )
-        await interaction.response.send_modal(CustomizeModal(game, self))
-
     @game.command(name="start", description="Assign secret throwers and begin the game")
     @app_commands.describe(
         team1_count="Number of secret throwers on team 1 (default 1)",
@@ -643,6 +543,7 @@ class GameCog(commands.Cog):
                 "Only the game host or a server moderator can start the game.", ephemeral=True
             )
         for team in (game.team1, game.team2):
+            # TODO Probably remove the min players?
             if len(team.players) < MIN_PLAYERS_PER_TEAM:
                 return await interaction.response.send_message(
                     f"**{team.channel.name}** needs at least {MIN_PLAYERS_PER_TEAM} players "
@@ -773,6 +674,8 @@ class GameCog(commands.Cog):
             await self.reveal_results(game)
         except asyncio.CancelledError:
             pass
+        except Exception:
+            log.exception("Voting timer failed for game %d in guild %d", game.game_id, game.guild_id)
 
     async def _collect_votes(self, game: Game, message: discord.Message) -> dict[int, dict[int, int]]:
         """Build votes dict from message reactions. voter_id → {team_idx → target_player_id}."""
@@ -801,13 +704,15 @@ class GameCog(commands.Cog):
     async def reveal_results(self, game: Game) -> None:
         """Reads reactions, clears them, builds results embed, commits to DB."""
         # Fetch fresh message so reaction counts are current
-        votes_reliable = True
         try:
             message = await game.message.channel.fetch_message(game.message.id)
         except discord.NotFound:
-            log.warning("Voting message deleted for game %d in guild %d — per-game achievements skipped", game.game_id, game.guild_id)
+            log.warning(
+                "Voting message deleted for game %d in guild %d",
+                game.game_id,
+                game.guild_id,
+            )
             message = game.message
-            votes_reliable = False
         except discord.HTTPException:
             message = game.message
 
@@ -856,7 +761,7 @@ class GameCog(commands.Cog):
             pass
 
         try:
-            elo_deltas, new_achievements = await self._commit_game(game, votes, votes_reliable=votes_reliable)
+            await self._commit_game(game, votes)
         except Exception:
             log.exception("Failed to commit game for guild %d — state preserved in Redis for recovery", game.guild_id)
             return
@@ -864,35 +769,26 @@ class GameCog(commands.Cog):
         await delete_game_state(game.game_id)
         self.active_games.get(game.guild_id, {}).pop(game.game_id, None)
         log.info("Game completed in guild %d", game.guild_id)
-        await self._update_elo_roles(game)
-        await self._notify_achievements(game, new_achievements)
-        await self._send_recap(game, votes, elo_deltas, new_achievements)
 
-    async def _commit_game(
-        self, game: Game, votes: dict[int, dict[int, int]], *, votes_reliable: bool = True
-    ) -> tuple[dict[int, tuple[float, float]], dict[int, int]]:
-        """Persists the completed game, updates stats and ELO, checks achievements.
+    async def _commit_game(self, game: Game, votes: dict[int, dict[int, int]]) -> None:
+        """Persists the completed game and applies stat + ELO updates."""
+        teams = game.get_teams()
 
-        Returns (elo_deltas, new_achievements) where:
-          elo_deltas:       {user_id: (innocent_delta, thrower_delta)}
-          new_achievements: {user_id: bitmask of newly unlocked achievements}
-        """
-        elo_deltas: dict[int, tuple[float, float]] = {}
-        new_achievements: dict[int, int] = {}
         async with AsyncSessionLocal() as session:
-            all_players = game.team1.players + game.team2.players
+            db_users: dict[int, DBUser] = {}
+            for team in teams:
+                for player in team.players:
+                    db_user = await session.get(DBUser, player.member.id)
+                    if db_user:
+                        db_user.username = player.member.name
+                    else:
+                        db_user = DBUser(user_id=player.member.id, username=player.member.name)
+                        session.add(db_user)
+                    db_users[player.member.id] = db_user
 
-            # Upsert User records
-            for player in all_players:
-                existing = await session.get(DBUser, player.member.id)
-                if existing:
-                    existing.username = player.member.name
-                else:
-                    session.add(DBUser(user_id=player.member.id, username=player.member.name))
-
+            # Flush so column defaults are populated before the counters below increment them
             await session.flush()
 
-            # Game record
             session.add(
                 DBGame(
                     game_id=game.game_id,
@@ -902,8 +798,7 @@ class GameCog(commands.Cog):
             )
             await session.flush()
 
-            # Player records
-            for team in game.get_teams():
+            for team in teams:
                 for player in team.players:
                     session.add(
                         DBPlayer(
@@ -914,34 +809,19 @@ class GameCog(commands.Cog):
                         )
                     )
 
-            await session.flush()
-
-            # Vote records
             for voter_id, team_votes in votes.items():
                 for target_id in team_votes.values():
-                    session.add(
-                        DBVote(
-                            game_id=game.game_id,
-                            voter_id=voter_id,
-                            target_id=target_id,
-                        )
-                    )
+                    session.add(DBVote(game_id=game.game_id, voter_id=voter_id, target_id=target_id))
 
-            await session.flush()
-
-            # Update cached stat counters
-            for team in game.get_teams():
+            for team in teams:
                 team_won = team.channel.id == game.winning_channel_id
                 for player in team.players:
-                    db_user = await session.get(DBUser, player.member.id)
-                    if not db_user:
-                        continue
+                    db_user = db_users[player.member.id]
                     db_user.games_played += 1
                     if team_won:
                         db_user.games_won += 1
                         db_user.win_streak += 1
-                        if db_user.win_streak > db_user.best_win_streak:
-                            db_user.best_win_streak = db_user.win_streak
+                        db_user.best_win_streak = max(db_user.best_win_streak, db_user.win_streak)
                     else:
                         db_user.win_streak = 0
                     if player.is_thrower:
@@ -950,335 +830,33 @@ class GameCog(commands.Cog):
                             db_user.games_thrown += 1
 
             for voter_id, team_votes in votes.items():
-                db_voter = await session.get(DBUser, voter_id)
+                voter = db_users.get(voter_id)
                 for target_id in team_votes.values():
-                    db_target = await session.get(DBUser, target_id)
-                    if db_voter:
-                        db_voter.total_votes_cast += 1
-                    if db_target:
-                        db_target.total_votes_received += 1
+                    target = db_users.get(target_id)
+                    if voter:
+                        voter.total_votes_cast += 1
+                    if target:
+                        target.total_votes_received += 1
                         if target_id in game.thrower_ids:
-                            if db_voter:
-                                db_voter.votes_cast_on_thrower += 1
-                            db_target.votes_received_as_thrower += 1
+                            if voter:
+                                voter.votes_cast_on_thrower += 1
+                            target.votes_received_as_thrower += 1
 
-            # ELO updates
-            # thrower_elo: outcome-based — clean throw (best) → team won → team lost but caught (worst)
-            # innocent_elo: 60% team win + 40% detection accuracy, fixed 0.5 baseline (no opponent comparison)
-            # Both use asymmetric K: gaining is easier below ELO 50, harder above (gravitational pull to 50)
-            teams = game.get_teams()
-            thrower_ids_set = set(game.thrower_ids)
+            roster = [[(p.member.id, p.is_thrower) for p in team.players] for team in teams]
+            winning_team_idx = next(
+                (i for i, team in enumerate(teams) if team.channel.id == game.winning_channel_id), None
+            )
+            ratings = {user_id: (u.innocent_elo, u.thrower_elo) for user_id, u in db_users.items()}
 
-            # Per-team vote tallies — needed to determine who was "caught" (most accused)
-            vote_tallies: list[dict[int, int]] = [{p.member.id: 0 for p in team.players} for team in teams]
-            for voter_votes in votes.values():
-                for team_idx, target_id in voter_votes.items():
-                    if target_id in vote_tallies[team_idx]:
-                        vote_tallies[team_idx][target_id] += 1
-
-            most_accused: list[int | None] = [
-                max(tally, key=tally.get) if any(v > 0 for v in tally.values()) else None for tally in vote_tallies
-            ]
-
-            # Per-game achievement context: track which voters correctly identified each thrower
-            thrower_voters: dict[int, set[int]] = {tid: set() for tid in thrower_ids_set}
-            for _vid, _vvotes in votes.items():
-                for _target in _vvotes.values():
-                    if _target in thrower_voters:
-                        thrower_voters[_target].add(_vid)
-
-            # Detection score: +0.5 per correct guess, −INCORRECT_PENALTY per wrong, −ABSTAIN_PENALTY per abstain.
-            # Normalized to game average so better-than-average detection is rewarded.
-            num_teams = len(teams)
-            _default_detection = 0.5 - ELO_ABSTAIN_PENALTY
-            voter_detection: dict[int, float] = {}
-            for _voter_id, _voter_votes in votes.items():
-                correct = sum(1 for tid in _voter_votes.values() if tid in thrower_ids_set)
-                incorrect = sum(1 for tid in _voter_votes.values() if tid not in thrower_ids_set)
-                abstentions = num_teams - len(_voter_votes)
-                voter_detection[_voter_id] = (
-                    0.5
-                    + (correct / num_teams) * 0.5
-                    - (incorrect / num_teams) * ELO_INCORRECT_PENALTY
-                    - (abstentions / num_teams) * ELO_ABSTAIN_PENALTY
-                )
-
-            _innocent_scores = [
-                voter_detection.get(p.member.id, _default_detection)
-                for team in teams
-                for p in team.players
-                if not p.is_thrower
-            ]
-            _game_avg_detection = sum(_innocent_scores) / len(_innocent_scores) if _innocent_scores else 0.5
-
-            # Thrower/innocent counts per team (no ELO snapshots needed — no opponent comparison)
-            team_thrower_counts: list[int] = [max(1, sum(1 for p in team.players if p.is_thrower)) for team in teams]
-            team_innocent_counts: list[int] = [sum(1 for p in team.players if not p.is_thrower) for team in teams]
-            total_innocents = sum(team_innocent_counts)
-
-            for team_idx, team in enumerate(teams):
-                team_won = team.channel.id == game.winning_channel_id
-
-                for player in team.players:
-                    db_user = await session.get(DBUser, player.member.id)
-                    if not db_user:
-                        continue
-
-                    old_innocent = db_user.innocent_elo
-                    old_thrower = db_user.thrower_elo
-
-                    if player.is_thrower:
-                        individually_caught = most_accused[team_idx] == player.member.id
-                        if not team_won and not individually_caught:
-                            db_user.games_evaded += 1
-
-                        # 4 explicit outcomes ranked best → worst for the thrower
-                        if not team_won and not individually_caught:
-                            actual = 1.0  # clean throw: team lost + survived vote
-                        elif not team_won and individually_caught:
-                            actual = 0.2  # team lost but you were identified
-                        elif team_won and not individually_caught:
-                            actual = 0.25  # failed to throw but at least stayed hidden
-                        else:
-                            actual = 0.0  # worst: team won AND you were caught
-
-                        delta = actual - 0.5
-                        k = self._k_factor(db_user.thrower_elo, delta) / team_thrower_counts[team_idx]
-                        db_user.thrower_elo = max(0.0, min(100.0, db_user.thrower_elo + k * delta))
-                    else:
-                        win_score = 1.0 if team_won else 0.0
-                        n_this = team_innocent_counts[team_idx]
-                        win_weight = (total_innocents / 2) / n_this if n_this > 0 else 1.0
-                        raw_detection = voter_detection.get(player.member.id, _default_detection)
-                        detection_score = 0.5 + (raw_detection - _game_avg_detection)
-                        actual = 0.6 * win_score * win_weight + 0.4 * detection_score
-                        delta = actual - 0.5
-                        k = self._k_factor(db_user.innocent_elo, delta)
-                        db_user.innocent_elo = max(0.0, min(100.0, db_user.innocent_elo + k * delta))
-
-                    elo_deltas[player.member.id] = (
-                        db_user.innocent_elo - old_innocent,
-                        db_user.thrower_elo - old_thrower,
-                    )
-
-                    pid = player.member.id
-                    if not votes_reliable:
-                        pg_flags = {}
-                    elif player.is_thrower:
-                        pg_flags = {"perfect_throw": vote_tallies[team_idx].get(pid, 0) == 0}
-                    else:
-                        my_votes = votes.get(pid, {})
-                        pg_flags = {
-                            "found_both": (
-                                len(my_votes) == len(teams)
-                                and all(my_votes.get(ti) in thrower_ids_set for ti in range(len(teams)))
-                            ),
-                            "lone_correct": any(
-                                thrower_voters.get(tid) == {pid}
-                                for tid in my_votes.values()
-                                if tid in thrower_ids_set
-                            ),
-                        }
-
-                    newly = check_new_achievements(db_user) | check_game_achievements(db_user, **pg_flags)
-                    if newly:
-                        db_user.achievements |= newly
-                        new_achievements[player.member.id] = newly
+            for user_id, update in compute_elo_updates(roster, votes, winning_team_idx, ratings).items():
+                db_user = db_users[user_id]
+                db_user.innocent_elo = update.innocent_elo
+                db_user.thrower_elo = update.thrower_elo
+                if update.evaded:
+                    db_user.games_evaded += 1
 
             await session.commit()
-        return elo_deltas, new_achievements
 
-    async def _update_elo_roles(self, game: Game) -> None:
-        """Assign Discord roles based on updated ELO tiers after a game completes."""
-        guild = self.bot.get_guild(game.guild_id)
-        if not guild:
-            return
-
-        async with AsyncSessionLocal() as session:
-            mappings = (
-                (await session.execute(select(GuildEloRole).where(GuildEloRole.guild_id == game.guild_id)))
-                .scalars()
-                .all()
-            )
-
-        if not mappings:
-            return
-
-        innocent_tiers = sorted(
-            [m for m in mappings if m.elo_type == "innocent"],
-            key=lambda m: m.min_elo,
-            reverse=True,
-        )
-        thrower_tiers = sorted(
-            [m for m in mappings if m.elo_type == "thrower"],
-            key=lambda m: m.min_elo,
-            reverse=True,
-        )
-        all_tier_role_ids = {m.role_id for m in mappings}
-
-        user_ids = [p.member.id for team in game.get_teams() for p in team.players]
-        async with AsyncSessionLocal() as session:
-            db_users = {
-                u.user_id: u
-                for u in (await session.execute(select(DBUser).where(DBUser.user_id.in_(user_ids)))).scalars()
-            }
-
-        for team in game.get_teams():
-            for player in team.players:
-                db_user = db_users.get(player.member.id)
-                if not db_user:
-                    log.warning("_update_elo_roles: no DB record for player %d in guild %d", player.member.id, game.guild_id)
-                    continue
-                member = player.member
-
-                target_role_ids: set[int] = set()
-                for tier in innocent_tiers:
-                    if db_user.innocent_elo >= tier.min_elo:
-                        target_role_ids.add(tier.role_id)
-                        log.info("ELO roles: %s innocent_elo=%.1f qualifies for role %d (min %.0f)", member, db_user.innocent_elo, tier.role_id, tier.min_elo)
-                        break
-                    else:
-                        log.info("ELO roles: %s innocent_elo=%.1f below tier min %.0f", member, db_user.innocent_elo, tier.min_elo)
-                for tier in thrower_tiers:
-                    if db_user.thrower_elo >= tier.min_elo:
-                        target_role_ids.add(tier.role_id)
-                        log.info("ELO roles: %s thrower_elo=%.1f qualifies for role %d (min %.0f)", member, db_user.thrower_elo, tier.role_id, tier.min_elo)
-                        break
-                    else:
-                        log.info("ELO roles: %s thrower_elo=%.1f below tier min %.0f", member, db_user.thrower_elo, tier.min_elo)
-
-                current_role_ids = {r.id for r in member.roles}
-                to_add = [
-                    guild.get_role(rid)
-                    for rid in target_role_ids
-                    if rid not in current_role_ids and guild.get_role(rid)
-                ]
-                to_remove = [
-                    guild.get_role(rid)
-                    for rid in all_tier_role_ids
-                    if rid not in target_role_ids and rid in current_role_ids and guild.get_role(rid)
-                ]
-                try:
-                    if to_remove:
-                        await member.remove_roles(*to_remove, reason="ELO tier update")
-                    if to_add:
-                        await member.add_roles(*to_add, reason="ELO tier update")
-                except discord.Forbidden:
-                    log.warning("Role hierarchy error assigning ELO roles in guild %d", game.guild_id)
-                    if game.guild_id not in self._role_hierarchy_warned:
-                        self._role_hierarchy_warned.add(game.guild_id)
-                        channel = self.bot.get_channel(game.text_channel_id)
-                        if channel:
-                            await channel.send(
-                                "⚠️ **ELO roles couldn't be assigned** — the bot's role must be above your ELO tier roles in the server hierarchy.\n"
-                                "**Fix:** Server Settings → Roles → drag **Secret Thrower** above your ELO roles.\n"
-                                "Run `/roles elo check` to confirm everything is set up correctly.",
-                                delete_after=300,
-                            )
-                except discord.HTTPException as exc:
-                    log.warning("Failed to update ELO roles for %s: %s", member, exc)
-
-    async def _notify_achievements(self, game: Game, new_achievements: dict[int, int]) -> None:
-        if not new_achievements:
-            return
-        member_map = {p.member.id: p.member for team in game.get_teams() for p in team.players}
-        for user_id, mask in new_achievements.items():
-            member = member_map.get(user_id)
-            if not member:
-                continue
-            unlocked = unlocked_list(mask)
-            lines = [f"{a.emoji} **{a.name}** — {a.description}" for a in unlocked]
-            noun = "an achievement" if len(unlocked) == 1 else f"{len(unlocked)} achievements"
-            try:
-                await member.send(f"🏆 You unlocked {noun} in **{member.guild.name}**!\n\n" + "\n".join(lines))
-            except discord.Forbidden:
-                pass
-
-    async def _send_recap(
-        self,
-        game: Game,
-        votes: dict[int, dict[int, int]],
-        elo_deltas: dict[int, tuple[float, float]],
-        new_achievements: dict[int, int],
-    ) -> None:
-        """Post a rich game recap to the text channel — premium servers only."""
-        if not await is_premium(game.guild_id):
-            return
-
-        channel = self.bot.get_channel(game.text_channel_id)
-        if not channel:
-            return
-
-        teams = game.get_teams()
-        member_map = {p.member.id: p.member for team in teams for p in team.players}
-
-        # Who accused whom
-        accused_by: dict[int, list[discord.Member]] = defaultdict(list)
-        for voter_id, team_votes in votes.items():
-            voter = member_map.get(voter_id)
-            if voter:
-                for target_id in team_votes.values():
-                    accused_by[target_id].append(voter)
-
-        # Vote tallies to determine caught/evaded per team
-        vote_tallies: list[dict[int, int]] = [{p.member.id: 0 for p in team.players} for team in teams]
-        for voter_votes in votes.values():
-            for team_idx, target_id in voter_votes.items():
-                if target_id in vote_tallies[team_idx]:
-                    vote_tallies[team_idx][target_id] += 1
-
-        most_accused: list[int | None] = [
-            max(tally, key=tally.get) if any(v > 0 for v in tally.values()) else None for tally in vote_tallies
-        ]
-
-        winner_team_idx = next((i for i, t in enumerate(teams) if t.channel.id == game.winning_channel_id), None)
-        winner_team = teams[winner_team_idx] if winner_team_idx is not None else None
-        recap_winner_name = self._team_name(game, winner_team_idx) if winner_team_idx is not None else ""
-        embed = discord.Embed(
-            title="🎭 Game Recap",
-            description=f"👑 **{recap_winner_name}** wins!" if winner_team else "",
-            color=discord.Color.gold(),
-        )
-
-        for team_idx, team in enumerate(teams):
-            team_won = team.channel.id == game.winning_channel_id
-            result_icon = "✅" if team_won else "❌"
-            lines: list[str] = []
-
-            for player in team.players:
-                innocent_delta, thrower_delta = elo_deltas.get(player.member.id, (0.0, 0.0))
-                name = player.member.display_name
-
-                newly = new_achievements.get(player.member.id, 0)
-                badge_str = (" · 🏅 " + "".join(a.emoji for a in unlocked_list(newly))) if newly else ""
-
-                if player.is_thrower:
-                    caught = most_accused[team_idx] == player.member.id
-                    outcome = "🎯 Caught" if caught else "😈 Evaded"
-                    sign = "+" if thrower_delta >= 0 else ""
-                    lines.append(f"🕵️ **{name}** · {outcome} · thrower ELO {sign}{thrower_delta:.1f}{badge_str}")
-                else:
-                    sign = "+" if innocent_delta >= 0 else ""
-                    elo_str = f"ELO {sign}{innocent_delta:.1f}"
-                    accusers = accused_by.get(player.member.id, [])
-                    if accusers:
-                        acc_str = ", ".join(m.display_name for m in accusers)
-                        lines.append(f"👤 **{name}** · {elo_str} · accused by {acc_str}{badge_str}")
-                    else:
-                        lines.append(f"👤 **{name}** · {elo_str}{badge_str}")
-
-            embed.add_field(
-                name=f"{self._team_name(game, team_idx)} {result_icon}",
-                value="\n".join(lines) or "—",
-                inline=False,
-            )
-
-        embed.set_footer(text="Secret Thrower Premium")
-
-        try:
-            await channel.send(embed=embed)
-        except discord.HTTPException as exc:
-            log.warning("Failed to send game recap in guild %d: %s", game.guild_id, exc)
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(GameCog(bot))

@@ -1,20 +1,15 @@
 from __future__ import annotations
 
 import time
-from collections import defaultdict
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 from sqlalchemy import func, select
 
-from achievements import ACHIEVEMENTS, format_achievements
 from constants import ELO_STARTING
-from database import AsyncSessionLocal, is_premium
-from models import Game as DBGame
-from models import Player as DBPlayer
+from database import AsyncSessionLocal
 from models import User as DBUser
-from models import Vote as DBVote
 
 _LEGEND_BASE = "Suspect Accuracy: % of votes you placed on a real thrower  •  Heat: avg votes against you per game"
 _LEGEND_THROWER = "  •  Throw Rate: team lost as thrower  •  Clean Throw: threw + not most accused"
@@ -227,7 +222,7 @@ class UserProfiles(commands.Cog):
             value=f"**{_pct(innocent_wins, innocent_games)}** ({innocent_wins}W as innocent)",
             inline=True,
         )
-        embed.add_field(name="​", value="​", inline=True)
+        embed.add_field(name="", value="", inline=True)
 
         # Row 2 — skill
         embed.add_field(
@@ -268,10 +263,14 @@ class UserProfiles(commands.Cog):
             value=f"**{_heat(innocent_votes_received, innocent_games)}**",
             inline=True,
         )
-        embed.add_field(name="​", value="​", inline=True)
+        embed.add_field(
+            name="🔥 Win Streak",
+            value=f"**{db_user.win_streak}** (best {db_user.best_win_streak})",
+            inline=True,
+        )
 
         # Spacer
-        embed.add_field(name="​", value="​", inline=False)
+        embed.add_field(name="", value="", inline=False)
 
         # Row 4 — ELO
         def _elo_str(elo: float) -> str:
@@ -286,7 +285,7 @@ class UserProfiles(commands.Cog):
         )
 
         # Spacer
-        embed.add_field(name="​", value="​", inline=False)
+        embed.add_field(name="", value="", inline=False)
 
         # Row 5 — server averages
         embed.add_field(
@@ -299,143 +298,6 @@ class UserProfiles(commands.Cog):
         )
 
         await interaction.followup.send(embed=embed)
-
-    @profile.command(name="history", description="View your last 10 games [Premium]")
-    @app_commands.describe(user="Player to view (default: yourself)", role="Filter by role")
-    @app_commands.choices(role=[
-        app_commands.Choice(name="Thrower", value="thrower"),
-        app_commands.Choice(name="Innocent", value="innocent"),
-    ])
-    async def history(
-        self,
-        interaction: discord.Interaction,
-        user: discord.Member = None,
-        role: app_commands.Choice[str] = None,
-    ) -> None:
-        if not await is_premium(interaction.guild_id):
-            return await interaction.response.send_message(
-                "📊 Game history is a **Premium** feature. Ask a server admin to use `/subscribe`.",
-                ephemeral=True,
-            )
-
-        target = user or interaction.user
-        await interaction.response.defer(ephemeral=True)
-
-        async with AsyncSessionLocal() as session:
-            # Last 10 games for this player in this guild
-            query = (
-                select(DBPlayer, DBGame)
-                .join(DBGame, DBPlayer.game_id == DBGame.game_id)
-                .where(DBPlayer.user_id == target.id, DBGame.guild_id == interaction.guild_id)
-            )
-            if role is not None:
-                query = query.where(DBPlayer.is_thrower == (role.value == "thrower"))
-            rows = (
-                await session.execute(query.order_by(DBGame.created_at.desc()).limit(10))
-            ).all()
-
-            if not rows:
-                return await interaction.followup.send(
-                    f"**{target.display_name}** has no recorded games in this server.", ephemeral=True
-                )
-
-            game_ids = [g.game_id for _, g in rows]
-
-            # Batch fetch all votes and all players for those games
-            all_votes = (
-                await session.execute(select(DBVote).where(DBVote.game_id.in_(game_ids)))
-            ).scalars().all()
-
-            all_players = (
-                await session.execute(select(DBPlayer).where(DBPlayer.game_id.in_(game_ids)))
-            ).scalars().all()
-
-        # Index for fast lookup
-        votes_by_game: dict[int, list[DBVote]] = defaultdict(list)
-        for v in all_votes:
-            votes_by_game[v.game_id].append(v)
-
-        players_by_game: dict[int, list[DBPlayer]] = defaultdict(list)
-        for p in all_players:
-            players_by_game[p.game_id].append(p)
-
-        lines: list[str] = []
-        wins = losses = 0
-
-        for player_row, game in rows:
-            team_won = player_row.channel_id == game.winning_channel_id
-            if team_won:
-                wins += 1
-            else:
-                losses += 1
-
-            # Discord relative timestamp — shows local date on hover
-            ts = f"<t:{int(game.created_at.timestamp())}:d>"
-            result = "✅" if team_won else "❌"
-
-            game_votes = votes_by_game[game.game_id]
-            game_players = players_by_game[game.game_id]
-            thrower_ids = {p.user_id for p in game_players if p.is_thrower}
-
-            if player_row.is_thrower:
-                team_player_ids = {p.user_id for p in game_players if p.channel_id == player_row.channel_id}
-                tally: dict[int, int] = {uid: 0 for uid in team_player_ids}
-                for v in game_votes:
-                    if v.target_id in tally:
-                        tally[v.target_id] += 1
-                most_accused = max(tally, key=tally.get) if any(tally.values()) else None
-                detail = "🎯 Caught" if most_accused == target.id else "😈 Evaded"
-                lines.append(f"{ts} {result} 🕵️ Thrower · {detail}")
-            else:
-                my_votes = [v for v in game_votes if v.voter_id == target.id]
-                if my_votes:
-                    correct = sum(1 for v in my_votes if v.target_id in thrower_ids)
-                    all_correct = correct == len(my_votes)
-                    detail = f"🔍 {'All correct' if all_correct else f'{correct}/{len(my_votes)} correct'}"
-                else:
-                    detail = "🔍 Didn't vote"
-                lines.append(f"{ts} {result} 👤 Innocent · {detail}")
-
-        thrower_count = sum(1 for p, _ in rows if p.is_thrower)
-        innocent_count = len(rows) - thrower_count
-
-        role_label = f" · {role.name} games" if role else ""
-        embed = discord.Embed(
-            title=f"Game History — {target.display_name}{role_label}",
-            description="\n".join(lines),
-            color=discord.Color.blurple(),
-        )
-        embed.set_thumbnail(url=target.display_avatar.url)
-        total = wins + losses
-        role_breakdown = f"🕵️ {thrower_count}×  👤 {innocent_count}×  ·  " if role is None else ""
-        embed.set_footer(text=f"{role_breakdown}{wins}W – {losses}L in last {total}  ·  Premium")
-        await interaction.followup.send(embed=embed, ephemeral=True)
-
-    @profile.command(name="achievements", description="View achievement progress for a player")
-    @app_commands.describe(user="Player to view (default: yourself)")
-    async def achievements(self, interaction: discord.Interaction, user: discord.Member = None) -> None:
-        target = user or interaction.user
-        await interaction.response.defer(ephemeral=True)
-
-        async with AsyncSessionLocal() as session:
-            db_user = await session.get(DBUser, target.id)
-
-        if db_user is None:
-            return await interaction.followup.send(
-                f"**{target.display_name}** has not played any games yet.", ephemeral=True
-            )
-
-        earned = bin(db_user.achievements).count("1")
-        total = len(ACHIEVEMENTS)
-        embed = discord.Embed(
-            title=f"Achievements — {target.display_name}",
-            description=f"**{earned}/{total}** earned\n\n{format_achievements(db_user.achievements, db_user)}",
-            color=discord.Color.gold(),
-        )
-        embed.set_thumbnail(url=target.display_avatar.url)
-        if db_user.best_win_streak > 0:
-            embed.set_footer(text=f"Best win streak: {db_user.best_win_streak} · Current: {db_user.win_streak}")
-        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @profile.command(name="leaderboard", description="Show top players ranked by various stats")
     async def leaderboard(self, interaction: discord.Interaction) -> None:

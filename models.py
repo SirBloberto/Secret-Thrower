@@ -1,45 +1,15 @@
 from __future__ import annotations
 
-import enum
 from datetime import datetime
 from typing import List, Optional
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 
 class Base(DeclarativeBase):
     pass
-
-
-class SubscriptionType(enum.Enum):
-    USER = "user"
-    GUILD = "guild"
-
-
-class Subscription(Base):
-    """Handles Stripe-related data and access control for premium features."""
-
-    __tablename__ = "subscriptions"
-
-    id: Mapped[int] = mapped_column(
-        Integer, primary_key=True, comment="Internal primary key for the subscription record"
-    )
-    target_id: Mapped[int] = mapped_column(
-        BigInteger, unique=True, index=True, comment="The Discord User ID or Guild ID that owns this subscription"
-    )
-    type: Mapped[SubscriptionType] = mapped_column(
-        Enum(SubscriptionType),
-        nullable=False,
-        comment="Defines if the subscription applies to a single user or an entire server",
-    )
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, default=False, comment="Quick-check flag to see if the subscription is currently valid"
-    )
-    expires_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), comment="The exact timestamp when premium access should be revoked"
-    )
 
 
 class User(Base):
@@ -62,7 +32,10 @@ class User(Base):
         Integer, default=0, server_default="0", comment="How many times this user was assigned the Secret Thrower role"
     )
     games_thrown: Mapped[int] = mapped_column(
-        Integer, default=0, server_default="0", comment="Games where user was the Thrower and their team lost (successful bluff)"
+        Integer,
+        default=0,
+        server_default="0",
+        comment="Games where user was the Thrower and their team lost (successful bluff)",
     )
     total_votes_received: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", comment="Total votes cast against this user by others"
@@ -91,9 +64,12 @@ class User(Base):
 
     innocent_elo: Mapped[float] = mapped_column(Float, default=50.0, server_default="50.0")
     thrower_elo: Mapped[float] = mapped_column(Float, default=50.0, server_default="50.0")
-    achievements: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0", comment="Bitmask of unlocked achievements")
-    win_streak: Mapped[int] = mapped_column(Integer, default=0, server_default="0", comment="Current consecutive win streak")
-    best_win_streak: Mapped[int] = mapped_column(Integer, default=0, server_default="0", comment="All-time best consecutive win streak")
+    win_streak: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", comment="Current consecutive win streak"
+    )
+    best_win_streak: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", comment="All-time best consecutive win streak"
+    )
 
     game_history: Mapped[List["Player"]] = relationship(back_populates="user")
     votes_received: Mapped[List["Vote"]] = relationship(foreign_keys="[Vote.target_id]", back_populates="target")
@@ -144,36 +120,6 @@ class Player(Base):
 
     game: Mapped["Game"] = relationship(back_populates="players")
     user: Mapped["User"] = relationship(back_populates="game_history")
-
-
-class GuildSettings(Base):
-    """Stores per-guild configuration, persisting across Redis flushes."""
-
-    __tablename__ = "guild_settings"
-
-    guild_id: Mapped[int] = mapped_column(
-        BigInteger, primary_key=True, comment="The Discord Snowflake ID of the server"
-    )
-    voting_timer: Mapped[int] = mapped_column(
-        Integer, default=60, server_default="60", comment="Voting phase duration in seconds"
-    )
-    thrower_info: Mapped[bool] = mapped_column(
-        Boolean, default=False, server_default="false", comment="Whether throwers are told about teammates who are also throwers"
-    )
-
-
-class GuildEloRole(Base):
-    """Maps ELO tier thresholds to Discord role IDs for automatic role assignment."""
-
-    __tablename__ = "guild_elo_roles"
-
-    __table_args__ = (UniqueConstraint("guild_id", "role_id", name="uq_guild_elo_role"),)
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    guild_id: Mapped[int] = mapped_column(BigInteger, index=True, comment="The Discord Guild ID")
-    elo_type: Mapped[str] = mapped_column(String(16), comment="'innocent' or 'thrower'")
-    min_elo: Mapped[float] = mapped_column(Float, comment="Minimum ELO to receive this role")
-    role_id: Mapped[int] = mapped_column(BigInteger, comment="Discord role ID to assign")
 
 
 class Vote(Base):

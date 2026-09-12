@@ -5,6 +5,7 @@ Revises: d2627e3ca35f
 Create Date: 2026-06-20 23:00:00.000000
 
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -29,7 +30,8 @@ def upgrade() -> None:
     )
 
     # Backfill: thrower, team lost, not the most-voted player on their team
-    op.execute(sa.text("""
+    op.execute(
+        sa.text("""
         WITH vote_counts AS (
             SELECT v.game_id, gp.channel_id, v.target_id, COUNT(*) AS cnt
             FROM votes v
@@ -55,7 +57,8 @@ def upgrade() -> None:
             GROUP BY gp.user_id
         ) subq
         WHERE users.user_id = subq.user_id
-    """))
+    """)
+    )
 
 
 def downgrade() -> None:

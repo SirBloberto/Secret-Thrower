@@ -31,9 +31,6 @@ class Team:
 class GameSettings:
     thrower_info: bool = False
     voting_timer: int = 60
-    team1_name: str = ""
-    team2_name: str = ""
-    embed_color: int | None = None
 
 
 class Game:
@@ -52,32 +49,31 @@ class Game:
         self.message: discord.Message | None = None
         self.voting_task: asyncio.Task[None] | None = None
 
-    def get_teams(self) -> list[Team]:
+    def get_teams(self) -> list[Team | None]:
         return [self.team1, self.team2]
 
     def to_json(self) -> str:
-        return json.dumps({
-            "game_id": self.game_id,
-            "guild_id": self.guild_id,
-            "state": self.state.value,
-            "thrower_ids": self.thrower_ids,
-            "winning_channel_id": self.winning_channel_id,
-            "vote_end_timestamp": self.vote_end_timestamp,
-            "host_id": self.host_id,
-            "text_channel_id": self.text_channel_id,
-            "message_id": self.message.id if self.message else None,
-            "team1_channel_id": self.team1.channel.id if self.team1 else None,
-            "team1_player_ids": [p.member.id for p in self.team1.players] if self.team1 else [],
-            "team2_channel_id": self.team2.channel.id if self.team2 else None,
-            "team2_player_ids": [p.member.id for p in self.team2.players] if self.team2 else [],
-            "settings": {
-                "voting_timer": self.settings.voting_timer,
-                "thrower_info": self.settings.thrower_info,
-                "team1_name": self.settings.team1_name,
-                "team2_name": self.settings.team2_name,
-                "embed_color": self.settings.embed_color,
-            },
-        })
+        return json.dumps(
+            {
+                "game_id": self.game_id,
+                "guild_id": self.guild_id,
+                "state": self.state.value,
+                "thrower_ids": self.thrower_ids,
+                "winning_channel_id": self.winning_channel_id,
+                "vote_end_timestamp": self.vote_end_timestamp,
+                "host_id": self.host_id,
+                "text_channel_id": self.text_channel_id,
+                "message_id": self.message.id if self.message else None,
+                "team1_channel_id": self.team1.channel.id if self.team1 else None,
+                "team1_player_ids": [p.member.id for p in self.team1.players] if self.team1 else [],
+                "team2_channel_id": self.team2.channel.id if self.team2 else None,
+                "team2_player_ids": [p.member.id for p in self.team2.players] if self.team2 else [],
+                "settings": {
+                    "voting_timer": self.settings.voting_timer,
+                    "thrower_info": self.settings.thrower_info,
+                },
+            }
+        )
 
     @classmethod
     def from_json(cls, json_str: str) -> Game:
@@ -93,11 +89,5 @@ class Game:
         game.host_id = data.get("host_id")
         game.text_channel_id = data.get("text_channel_id")
         s = data["settings"]
-        game.settings = GameSettings(
-            voting_timer=s["voting_timer"],
-            thrower_info=s["thrower_info"],
-            team1_name=s.get("team1_name", ""),
-            team2_name=s.get("team2_name", ""),
-            embed_color=s.get("embed_color"),
-        )
+        game.settings = GameSettings(voting_timer=s["voting_timer"], thrower_info=s["thrower_info"])
         return game

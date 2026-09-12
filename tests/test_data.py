@@ -1,4 +1,5 @@
 """Tests for Game serialisation — no Discord or DB needed."""
+
 from data import Game, GameSettings, GameState
 
 
